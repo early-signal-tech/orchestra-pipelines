@@ -1,0 +1,108 @@
+# Orchestra pipeline "Dummy Dry Run Pipeline" (alias: dummy_dry_run)
+# Python tasks run from this repo: python/dummy_dry_run/<task_id>.py, branch from the python_branch input.
+# Storage: ORCHESTRA-backed. Publish changes via the Orchestra UI/API - committing here
+# alone does not deploy them.
+configuration:
+  concurrency:
+    maxActive: 1
+inputs:
+  run_label:
+    type: string
+    default: dry-run
+  python_branch:
+    type: string
+    default: main
+meta:
+  notes: 'Dummy end-to-end pipeline used to smoke-test Orchestra wiring: four no-op Python tasks plus an ORCHESTRA WAIT. Contacts no external system and writes no data, so it is safe to run in any environment. Intentionally has no schedule - trigger it manually or via the run-dummy-dry-run-pipeline GitHub Action. Task code lives in Git at python/dummy_dry_run/ in early-signal-tech/orchestra-pipelines;
+    the branch is parametrised via the python_branch input so CI can test a PR branch. Reads DUMMY_ROW_LIMIT and DUMMY_TARGET_TABLE from the active environment to prove environment variable resolution works.'
+name: Dummy Dry Run Pipeline
+pipeline:
+  stage_extract:
+    dependsOn: []
+    name: Extract (dummy)
+    tasks:
+      dummy_extract_customers:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy extract - customers
+        parameters:
+          source: GIT
+          command: python dummy_extract_customers.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
+          package_manager: PIP
+          python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "customers" }'
+          set_outputs: false
+      dummy_extract_orders:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy extract - orders
+        parameters:
+          source: GIT
+          command: python dummy_extract_orders.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
+          package_manager: PIP
+          python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "orders" }'
+          set_outputs: false
+  stage_transform:
+    dependsOn:
+    - stage_extract
+    name: Transform (dummy)
+    tasks:
+      dummy_transform:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy transform
+        parameters:
+          source: GIT
+          command: python dummy_transform.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
+          package_manager: PIP
+          python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          set_outputs: false
+  stage_settle:
+    dependsOn:
+    - stage_transform
+    name: Settle
+    tasks:
+      dummy_wait:
+        dependsOn: []
+        integration: ORCHESTRA
+        integrationJob: WAIT
+        name: Wait for downstream settle
+        parameters:
+          wait_minutes: 1
+  stage_publish:
+    dependsOn:
+    - stage_settle
+    name: Publish (dummy)
+    tasks:
+      dummy_publish:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy publish
+        parameters:
+          source: GIT
+          command: python dummy_publish.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
+          package_manager: PIP
+          python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          set_outputs: false
+version: v1
+webhook:
+  enabled: false
