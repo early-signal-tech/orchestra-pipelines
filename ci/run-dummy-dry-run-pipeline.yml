@@ -1,0 +1,123 @@
+name: Run Dummy Dry Run Pipeline
+
+# Triggers the Orchestra pipeline "Dummy Dry Run Pipeline".
+#
+# On a pull request the pipeline runs with python_branch set to the PR branch, so the
+# Python under review is what actually executes. On merge to main it runs against main.
+#
+# Requires repository secret ORCHESTRA_API_KEY (an Orchestra *standard* API key).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_label:
+        description: Label passed through to the pipeline's run_label input
+        required: false
+        default: manual-dispatch
+        type: string
+      python_branch:
+        description: Branch of this repo the Python tasks should run from
+        required: false
+        default: main
+        type: string
+      environment:
+        description: Orchestra environment to run in
+        required: false
+        default: Staging
+        type: choice
+        options:
+          - Staging
+  pull_request:
+    branches: [main]
+    paths:
+      - python/dummy_dry_run/**
+      - pipelines/dummy_dry_run.yaml
+      - .github/workflows/run-dummy-dry-run-pipeline.yml
+  push:
+    branches: [main]
+    paths:
+      - python/dummy_dry_run/**
+      - pipelines/dummy_dry_run.yaml
+      - .github/workflows/run-dummy-dry-run-pipeline.yml
+
+# The pipeline allows only one active run (concurrency.maxActive: 1), so serialise here
+# rather than have Orchestra queue or reject overlapping runs.
+concurrency:
+  group: dummy-dry-run-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    name: Trigger and wait for Orchestra
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve run parameters
+        id: params
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          IN_LABEL: ${{ inputs.run_label }}
+          IN_BRANCH: ${{ inputs.python_branch }}
+          IN_ENV: ${{ inputs.environment }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request)
+              label="pr-${PR_NUMBER}"
+              branch="$HEAD_REF"
+              ;;
+            push)
+              label="main-${SHA:0:7}"
+              branch="main"
+              ;;
+            *)
+              label="${IN_LABEL:-manual-dispatch}"
+              branch="${IN_BRANCH:-main}"
+              ;;
+          esac
+          {
+            echo "run_label=$label"
+            echo "python_branch=$branch"
+            echo "environment=${IN_ENV:-Staging}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Running with label=$label python_branch=$branch env=${IN_ENV:-Staging}"
+
+      - name: Trigger Orchestra pipeline
+        id: orchestra
+        uses: orchestra-hq/run-pipeline@v1.5.0
+        with:
+          api_key: ${{ secrets.ORCHESTRA_API_KEY }}
+          # Dummy Dry Run Pipeline (alias: dummy_dry_run)
+          pipeline_id: e389a3ed-f39e-443e-82ec-0fe7b4790fc9
+          # Environment name is case-sensitive and must exist in Orchestra.
+          environment: ${{ steps.params.outputs.environment }}
+          poll_interval: 20
+          run_inputs: |
+            {
+              "run_label": "${{ steps.params.outputs.run_label }}",
+              "python_branch": "${{ steps.params.outputs.python_branch }}"
+            }
+          # No `branch:` input - this pipeline's definition is Orchestra-backed, not
+          # loaded from git. The Python tasks' branch is set via python_branch above.
+
+      - name: Summarise run
+        if: always()
+        env:
+          STATUS: ${{ steps.orchestra.outputs.status }}
+          RUN_ID: ${{ steps.orchestra.outputs.pipeline_run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Orchestra: Dummy Dry Run Pipeline"
+            echo ""
+            echo "- Status: \`${STATUS:-unknown}\`"
+            echo "- Environment: \`${{ steps.params.outputs.environment }}\`"
+            echo "- Python branch: \`${{ steps.params.outputs.python_branch }}\`"
+            echo "- Run label: \`${{ steps.params.outputs.run_label }}\`"
+            if [ -n "${RUN_ID:-}" ]; then
+              echo "- [View run in Orchestra](https://app.getorchestra.io/pipeline-runs/${RUN_ID}/task-runs)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

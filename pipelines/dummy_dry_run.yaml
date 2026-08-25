@@ -1,15 +1,20 @@
-# Backup of Orchestra pipeline "Dummy Dry Run Pipeline" (alias: dummy_dry_run)
-# Storage: ORCHESTRA-backed, published version 1. This file is a snapshot, not the source of truth.
-# Exported 2026-08-25.
+# Orchestra pipeline "Dummy Dry Run Pipeline" (alias: dummy_dry_run)
+# Python tasks run from this repo: python/dummy_dry_run/<task_id>.py, branch from the python_branch input.
+# Storage: ORCHESTRA-backed. Publish changes via the Orchestra UI/API - committing here
+# alone does not deploy them.
 configuration:
   concurrency:
     maxActive: 1
 inputs:
   run_label:
-    default: dry-run
     type: string
+    default: dry-run
+  python_branch:
+    type: string
+    default: main
 meta:
-  notes: 'Dummy end-to-end pipeline used to smoke-test Orchestra wiring: four stages of no-op inline Python plus an ORCHESTRA WAIT. Contacts no external system and writes no data, so it is safe to run in any environment. Intentionally has no schedule - trigger it manually. Reads DUMMY_ROW_LIMIT and DUMMY_TARGET_TABLE from the active environment to prove environment variable resolution works.'
+  notes: 'Dummy end-to-end pipeline used to smoke-test Orchestra wiring: four no-op Python tasks plus an ORCHESTRA WAIT. Contacts no external system and writes no data, so it is safe to run in any environment. Intentionally has no schedule - trigger it manually or via the run-dummy-dry-run-pipeline GitHub Action. Task code lives in Git at python/dummy_dry_run/ in early-signal-tech/orchestra-pipelines;
+    the branch is parametrised via the python_branch input so CI can test a PR branch. Reads DUMMY_ROW_LIMIT and DUMMY_TARGET_TABLE from the active environment to prove environment variable resolution works.'
 name: Dummy Dry Run Pipeline
 pipeline:
   stage_extract:
@@ -22,37 +27,30 @@ pipeline:
         integrationJob: PYTHON_EXECUTE_SCRIPT
         name: Dummy extract - customers
         parameters:
-          code: |
-            import os
-            label = os.environ.get("RUN_LABEL", "unset")
-            limit = os.environ.get("ROW_LIMIT", "0")
-            dataset = os.environ.get("DATASET", "unknown")
-            print(f"[{label}] dummy extract of {dataset}: pretending to pull {limit} rows")
-            print(f"[{label}] no external system was contacted")
-          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "customers" }'
+          source: GIT
+          command: python dummy_extract_customers.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
           package_manager: PIP
           python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "customers" }'
           set_outputs: false
-          source: INLINE
       dummy_extract_orders:
         dependsOn: []
         integration: PYTHON
         integrationJob: PYTHON_EXECUTE_SCRIPT
         name: Dummy extract - orders
         parameters:
-          code: |
-            import os
-            label = os.environ.get("RUN_LABEL", "unset")
-            limit = os.environ.get("ROW_LIMIT", "0")
-            dataset = os.environ.get("DATASET", "unknown")
-            print(f"[{label}] dummy extract of {dataset}: pretending to pull {limit} rows")
-            rows = [{"id": i, "dataset": dataset} for i in range(int(limit))]
-            print(f"[{label}] built {len(rows)} in-memory rows; nothing was written anywhere")
-          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "orders" }'
+          source: GIT
+          command: python dummy_extract_orders.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
           package_manager: PIP
           python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "orders" }'
           set_outputs: false
-          source: INLINE
   stage_transform:
     dependsOn:
     - stage_extract
@@ -64,17 +62,15 @@ pipeline:
         integrationJob: PYTHON_EXECUTE_SCRIPT
         name: Dummy transform
         parameters:
-          code: |
-            import os
-            label = os.environ.get("RUN_LABEL", "unset")
-            target = os.environ.get("TARGET_TABLE", "unset")
-            print(f"[{label}] dummy transform -> would model into {target}")
-            print(f"[{label}] transform is a no-op: no warehouse credentials are used")
-          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          source: GIT
+          command: python dummy_transform.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
           package_manager: PIP
           python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
           set_outputs: false
-          source: INLINE
   stage_settle:
     dependsOn:
     - stage_transform
@@ -98,17 +94,15 @@ pipeline:
         integrationJob: PYTHON_EXECUTE_SCRIPT
         name: Dummy publish
         parameters:
-          code: |
-            import os
-            label = os.environ.get("RUN_LABEL", "unset")
-            target = os.environ.get("TARGET_TABLE", "unset")
-            print(f"[{label}] dummy publish complete for {target}")
-            print(f"[{label}] end-to-end dry run finished with no side effects")
-          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          source: GIT
+          command: python dummy_publish.py
+          project_dir: python/dummy_dry_run
+          shallow_clone_dirs: python/dummy_dry_run
+          branch: ${{ inputs.python_branch }}
           package_manager: PIP
           python_version: '3.12'
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
           set_outputs: false
-          source: INLINE
 version: v1
 webhook:
   enabled: false

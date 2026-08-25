@@ -1,15 +1,19 @@
 """Dummy extract - customers
 
-Backup of the inline PYTHON_EXECUTE_SCRIPT body for task `dummy_extract_customers`
-in stage `stage_extract` of the "Dummy Dry Run Pipeline" Orchestra pipeline.
+Run by the "Dummy Dry Run Pipeline" Orchestra pipeline as task `dummy_extract_customers`
+in stage `stage_extract`, via:
 
-Environment variables supplied by Orchestra:
+    project_dir: python/dummy_dry_run
+    command:     python dummy_extract_customers.py
+
+Environment variables injected by Orchestra at runtime:
   RUN_LABEL = ${{ inputs.run_label }}
   ROW_LIMIT = ${{ ENV.DUMMY_ROW_LIMIT }}
   DATASET = customers
 
-This file is a backup: the pipeline still carries the code inline
-(source: INLINE). Edit both, or migrate the task to source: GIT.
+No third-party imports: the task declares no build_command, so anything
+beyond the standard library needs a requirements.txt and a build_command
+added to the task first.
 """
 
 import os
