@@ -1,0 +1,114 @@
+# Backup of Orchestra pipeline "Dummy Dry Run Pipeline" (alias: dummy_dry_run)
+# Storage: ORCHESTRA-backed, published version 1. This file is a snapshot, not the source of truth.
+# Exported 2026-08-25.
+configuration:
+  concurrency:
+    maxActive: 1
+inputs:
+  run_label:
+    default: dry-run
+    type: string
+meta:
+  notes: 'Dummy end-to-end pipeline used to smoke-test Orchestra wiring: four stages of no-op inline Python plus an ORCHESTRA WAIT. Contacts no external system and writes no data, so it is safe to run in any environment. Intentionally has no schedule - trigger it manually. Reads DUMMY_ROW_LIMIT and DUMMY_TARGET_TABLE from the active environment to prove environment variable resolution works.'
+name: Dummy Dry Run Pipeline
+pipeline:
+  stage_extract:
+    dependsOn: []
+    name: Extract (dummy)
+    tasks:
+      dummy_extract_customers:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy extract - customers
+        parameters:
+          code: |
+            import os
+            label = os.environ.get("RUN_LABEL", "unset")
+            limit = os.environ.get("ROW_LIMIT", "0")
+            dataset = os.environ.get("DATASET", "unknown")
+            print(f"[{label}] dummy extract of {dataset}: pretending to pull {limit} rows")
+            print(f"[{label}] no external system was contacted")
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "customers" }'
+          package_manager: PIP
+          python_version: '3.12'
+          set_outputs: false
+          source: INLINE
+      dummy_extract_orders:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy extract - orders
+        parameters:
+          code: |
+            import os
+            label = os.environ.get("RUN_LABEL", "unset")
+            limit = os.environ.get("ROW_LIMIT", "0")
+            dataset = os.environ.get("DATASET", "unknown")
+            print(f"[{label}] dummy extract of {dataset}: pretending to pull {limit} rows")
+            rows = [{"id": i, "dataset": dataset} for i in range(int(limit))]
+            print(f"[{label}] built {len(rows)} in-memory rows; nothing was written anywhere")
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "ROW_LIMIT": "${{ ENV.DUMMY_ROW_LIMIT }}", "DATASET": "orders" }'
+          package_manager: PIP
+          python_version: '3.12'
+          set_outputs: false
+          source: INLINE
+  stage_transform:
+    dependsOn:
+    - stage_extract
+    name: Transform (dummy)
+    tasks:
+      dummy_transform:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy transform
+        parameters:
+          code: |
+            import os
+            label = os.environ.get("RUN_LABEL", "unset")
+            target = os.environ.get("TARGET_TABLE", "unset")
+            print(f"[{label}] dummy transform -> would model into {target}")
+            print(f"[{label}] transform is a no-op: no warehouse credentials are used")
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          package_manager: PIP
+          python_version: '3.12'
+          set_outputs: false
+          source: INLINE
+  stage_settle:
+    dependsOn:
+    - stage_transform
+    name: Settle
+    tasks:
+      dummy_wait:
+        dependsOn: []
+        integration: ORCHESTRA
+        integrationJob: WAIT
+        name: Wait for downstream settle
+        parameters:
+          wait_minutes: 1
+  stage_publish:
+    dependsOn:
+    - stage_settle
+    name: Publish (dummy)
+    tasks:
+      dummy_publish:
+        dependsOn: []
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Dummy publish
+        parameters:
+          code: |
+            import os
+            label = os.environ.get("RUN_LABEL", "unset")
+            target = os.environ.get("TARGET_TABLE", "unset")
+            print(f"[{label}] dummy publish complete for {target}")
+            print(f"[{label}] end-to-end dry run finished with no side effects")
+          environment_variables: '{ "RUN_LABEL": "${{ inputs.run_label }}", "TARGET_TABLE": "${{ ENV.DUMMY_TARGET_TABLE }}" }'
+          package_manager: PIP
+          python_version: '3.12'
+          set_outputs: false
+          source: INLINE
+version: v1
+webhook:
+  enabled: false
