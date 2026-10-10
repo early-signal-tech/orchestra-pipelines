@@ -66,3 +66,22 @@ PR and push runs are path-filtered to this pipeline's files. Because a PR run se
    (Orchestra → Settings → Workspace). A read-only key cannot start runs.
 2. The workflow targets the `Staging` environment, the only one configured. Add more
    `options:` under the `environment` input once other environments exist.
+
+## Triage Test Pipeline
+
+Deliberately failing pipeline used to test the **Triage Example** auto-heal pipeline, which
+triggers on any `FAILED` pipeline, triages it with an agent, and then fixes, retries or escalates.
+
+- Definition: [`pipelines/triage_test.yaml`](pipelines/triage_test.yaml)
+- Alias: `triage_test` · storage: Orchestra-backed
+- Script: [`python/triage_test/fail_test.py`](python/triage_test/fail_test.py) (standard library only, no external calls)
+
+| `fail_mode` input | Failure | Expected triage verdict | Expected outcome |
+| --- | --- | --- | --- |
+| `bug` (default) | `KeyError` from a typo | `FIX` | PR on `agent-fix/...`, rerun with `python_branch` = fix branch, Slack approval, merge + retry |
+| `transient` | Simulated HTTP 503 timeout, ~50% of runs | `RETRY` | Failed run retried once |
+| `auth` | Simulated expired API token | `ESCALATE` | Triage summary posted to `#agent-slack-alerts` |
+| `none` | — | — | Succeeds |
+
+`transient` and `auth` are intentional failures - agents should not change code for them.
+After the `bug` fix is merged, reintroduce the typo to test the FIX path again.

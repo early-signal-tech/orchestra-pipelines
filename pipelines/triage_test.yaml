@@ -1,0 +1,42 @@
+# Orchestra pipeline "Triage Test Pipeline" (alias: triage_test)
+# Python task runs from this repo: python/triage_test/fail_test.py, branch from the python_branch input.
+# Storage: ORCHESTRA-backed. Publish changes via the Orchestra UI/API - committing here
+# alone does not deploy them.
+version: v1
+name: Triage Test Pipeline
+pipeline:
+  stage_test:
+    name: Triage test
+    dependsOn: []
+    tasks:
+      fail_test:
+        integration: PYTHON
+        integrationJob: PYTHON_EXECUTE_SCRIPT
+        name: Fail test
+        dependsOn: []
+        parameters:
+          source: GIT
+          command: python fail_test.py
+          project_dir: python/triage_test
+          shallow_clone_dirs: python/triage_test
+          branch: ${{ inputs.python_branch }}
+          package_manager: PIP
+          python_version: '3.12'
+          environment_variables: '{ "FAIL_MODE": "${{ inputs.fail_mode }}" }'
+          set_outputs: false
+inputs:
+  fail_mode:
+    type: string
+    default: bug
+  python_branch:
+    type: string
+    default: main
+configuration:
+  concurrency:
+    maxActive: 1
+webhook:
+  enabled: false
+meta:
+  notes: 'Deliberately failing pipeline used to test the "Triage Example" auto-heal pipeline.
+    fail_mode input: bug (expect FIX), transient (expect RETRY), auth (expect ESCALATE),
+    none (succeeds). No schedule - run manually. Contacts no external system and writes no data.'
