@@ -85,3 +85,27 @@ triggers on any `FAILED` pipeline, triages it with an agent, and then fixes, ret
 
 `transient` and `auth` are intentional failures - agents should not change code for them.
 After the `bug` fix is merged, reintroduce the typo to test the FIX path again.
+
+## Setup and OML checks
+
+Pinned versions: `orchestra-cli` 0.5.1, `orchestra-lang` 2026.1015.2 (see [`pyproject.toml`](pyproject.toml)).
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+cp .env.example .env   # then set ORCHESTRA_API_KEY
+```
+
+```bash
+# local OML syntax check (orchestra-lang), no API key needed
+python oml/validate_oml.py oml/daily-sales.oml
+
+# API check; the CLI reads .oml as plain YAML
+set -a && source .env && set +a
+orchestra pipeline validate oml/daily-sales-yaml.oml
+```
+
+- [`oml/daily-sales.oml`](oml/daily-sales.oml): real OML (`%sql ... %%`). The CLI rejects it; `validate_oml.py` passes it.
+- [`oml/daily-sales-yaml.oml`](oml/daily-sales-yaml.oml): the same pipeline as plain YAML, no schedule. The CLI accepts it.
+
+The Claude plugin config for the `orchestra-skills` marketplace lives in [`.claude/settings.json`](.claude/settings.json). Run-time gotchas are in [`CLAUDE.md`](CLAUDE.md).
