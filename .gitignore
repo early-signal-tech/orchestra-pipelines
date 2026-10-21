@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.egg-info/
+.DS_Store
+PLAN.md
+BUGS.md
+customer-profile-orchestra.md
+tracker/
+.claude/worktrees/
+.claude/settings.local.json

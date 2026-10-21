@@ -1,0 +1,22 @@
+version: v1
+name: 'zz-test-daily-sales'
+pipeline:
+  load_sales:
+    integration: SNOWFLAKE
+    integration_job: SNOWFLAKE_RUN_QUERY
+    parameters:
+      set_outputs: true
+      statement: |
+        INSERT INTO sales_daily
+        SELECT * FROM sales_raw
+        WHERE loaded_at >= CURRENT_DATE()
+  transform:
+    integration: DBT_CORE
+    integration_job: DBT_CORE_EXECUTE
+    depends_on:
+      - load_sales
+    condition: "${{ tasks['load_sales'].status == 'SUCCEEDED' }}"
+    parameters:
+      commands: 'dbt build --select tag:daily'
+      package_manager: PIP
+      python_version: '3.12'
