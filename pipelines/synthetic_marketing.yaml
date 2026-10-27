@@ -35,7 +35,7 @@ pipeline:
           package_manager: PIP
           python_version: '3.12'
           build_command: pip install .
-          environment_variables: '{ "S3_BUCKET": "${{ ENV.S3_BUCKET }}", "S3_REGION": "${{ ENV.S3_REGION }}", "S3_ACCESS_KEY_ID": "${{ ENV.S3_ACCESS_KEY_ID }}", "S3_SECRET_ACCESS_KEY": "${{ ENV.S3_SECRET_ACCESS_KEY }}" }'
+          environment_variables: '{ "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3" }'
           set_outputs: false
   stage_validate:
     name: Validate
@@ -46,12 +46,12 @@ pipeline:
         name: Validate generated data
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
-            WITH c AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), s AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
-                 t AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), v AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
+            WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
+                 t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
             checks AS (
               SELECT 'total_rows_outside_4000_6000' AS check_name,
                      CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
@@ -85,16 +85,16 @@ pipeline:
         name: Create tables if missing
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
-            CREATE TABLE IF NOT EXISTS campaigns_daily AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS sessions AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS conversions AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS ad_creatives AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS attribution_touchpoints AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS metadata_snapshots AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS campaigns_daily AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS sessions AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS conversions AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS ad_creatives AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS attribution_touchpoints AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS metadata_snapshots AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
           set_outputs: false
   stage_load:
     name: Load
@@ -105,14 +105,14 @@ pipeline:
         name: Load campaigns_daily
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO campaigns_daily
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM campaigns_daily tgt WHERE tgt.campaign_id = src.campaign_id AND tgt.date = src.date)
@@ -121,14 +121,14 @@ pipeline:
         name: Load sessions
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO sessions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM sessions tgt WHERE tgt.session_id = src.session_id)
@@ -137,14 +137,14 @@ pipeline:
         name: Load conversions
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO conversions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM conversions tgt WHERE tgt.conversion_id = src.conversion_id)
@@ -153,14 +153,14 @@ pipeline:
         name: Load ad_creatives
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO ad_creatives
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM ad_creatives tgt WHERE tgt.creative_id = src.creative_id AND tgt.date = src.date)
@@ -169,14 +169,14 @@ pipeline:
         name: Load attribution_touchpoints
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO attribution_touchpoints
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM attribution_touchpoints tgt WHERE tgt.touchpoint_id = src.touchpoint_id)
@@ -185,14 +185,14 @@ pipeline:
         name: Load metadata_snapshots
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
-        connection: ${{ ENV.MOTHERDUCK_CONNECTION }}
+        connection: early_signal___synthetic_marketing_data_93711
         depends_on: []
         parameters:
           query: |
             INSERT INTO metadata_snapshots
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM metadata_snapshots tgt WHERE tgt.entity_id = src.entity_id AND tgt.date = src.date)
@@ -213,4 +213,3 @@ pipeline:
           shallow_clone_dirs: synthetic_marketing/dbt
           package_manager: PIP
           python_version: '3.12'
-          environment_variables: '{ "MOTHERDUCK_DATABASE": "${{ ENV.MOTHERDUCK_DATABASE }}" }'

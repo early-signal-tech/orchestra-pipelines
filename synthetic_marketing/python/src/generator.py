@@ -48,6 +48,12 @@ S3_BUCKET = os.getenv("S3_BUCKET")
 S3_PREFIX = "marketing"
 CONFIG_PATH = "config.yaml"
 
+
+def _linked(field: str):
+    """Value of an AWS_S3__<connection>__<field> variable that Orchestra exports from a linked connection."""
+    return next((v for k, v in os.environ.items() if k.startswith("AWS_S3__") and k.endswith(field)), None)
+
+
 # ============================================================
 # REALISTIC DISTRIBUTION CONSTANTS
 # ============================================================
@@ -757,10 +763,9 @@ def run_dlt_pipeline(run_date: date, batch_size: int = 1000):
             destination=filesystem(
                 bucket_url=f"s3://{S3_BUCKET}",
                 credentials={
-                    # S3_* names because Orchestra rejects AWS_* in task env vars
-                    "aws_access_key_id": os.getenv("S3_ACCESS_KEY_ID") or os.getenv("AWS_ACCESS_KEY_ID"),
-                    "aws_secret_access_key": os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY"),
-                    "region_name": os.getenv("S3_REGION") or os.getenv("AWS_REGION", "us-east-1"),
+                    "aws_access_key_id": _linked("ACCESS_KEY_ID") or os.getenv("AWS_ACCESS_KEY_ID"),
+                    "aws_secret_access_key": _linked("SECRET_ACCESS_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY"),
+                    "region_name": _linked("REGION") or os.getenv("S3_REGION") or os.getenv("AWS_REGION", "us-east-1"),
                 },
                 layout="{table_name}/year={YYYY}/month={MM}/day={DD}/{table_name}_batch_{file_id}.parquet",
                 current_datetime=pendulum.datetime(run_date.year, run_date.month, run_date.day),
@@ -769,6 +774,7 @@ def run_dlt_pipeline(run_date: date, batch_size: int = 1000):
         )
         print(f"   Pipeline: {pipeline.pipeline_name}")
         print(f"   Destination: s3://{S3_BUCKET}/{S3_PREFIX}")
+        print(f"   Linked S3 variables: {sorted(k for k in os.environ if k.startswith('AWS_S3__'))}")
         print(f"   Batch size: {batch_size} rows/file\n")
 
     # Step 3: Create source with all resources
