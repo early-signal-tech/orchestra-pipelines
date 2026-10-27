@@ -1,0 +1,236 @@
+channels:
+  - meta
+  - google_ads
+  - linkedin
+  - tiktok
+  - twitter
+  - pinterest
+  - snapchat
+  - reddit
+
+creative_types:
+  meta:
+    - social_feed_image
+    - social_feed_video
+    - social_stories
+    - shopping_carousel
+    - reels
+  google_ads:
+    - search_text
+    - display_banner
+    - video_preroll
+    - shopping_ads
+    - discovery_ads
+  linkedin:
+    - sponsored_content
+    - text_ads
+    - message_ads
+    - video_ads
+  tiktok:
+    - in_feed_video
+    - spark_ads
+    - top_view
+    - branded_hashtag
+  twitter:
+    - promoted_tweet
+    - promoted_video
+    - amplify_pre_roll
+    - takeover
+  pinterest:
+    - promoted_pin
+    - shopping_ad
+    - carousel_ad
+    - video_pin
+  snapchat:
+    - snap_ad
+    - story_ad
+    - collection_ad
+    - commercial
+  reddit:
+    - promoted_post
+    - display_ad
+    - video_ad
+    - takeover
+
+campaign_name_templates:
+  meta:
+    - "{season}_{objective}_{geo}"
+    - "{product}_{funnel_stage}_{audience}"
+    - "{season}_{product}_{geo}"
+  google_ads:
+    - "google_{season}_{objective}"
+    - "search_{product}_{funnel_stage}"
+    - "display_{audience}_{geo}"
+  linkedin:
+    - "linkedin_{objective}_{audience}"
+    - "b2b_{product}_{funnel_stage}"
+    - "{season}_{objective}_professional"
+  tiktok:
+    - "tiktok_{product}_{audience}"
+    - "{season}_viral_{objective}"
+    - "ugc_{product}_{geo}"
+  twitter:
+    - "twitter_{season}_{objective}"
+    - "promoted_{product}_{audience}"
+  pinterest:
+    - "pinterest_{product}_{season}"
+    - "visual_{objective}_{audience}"
+  snapchat:
+    - "snap_{audience}_{objective}"
+    - "{season}_{product}_stories"
+  reddit:
+    - "reddit_{audience}_{objective}"
+    - "community_{product}_{funnel_stage}"
+
+template_values:
+  season:
+    - q1
+    - q2
+    - q3
+    - q4
+    - black_friday
+    - cyber_monday
+    - holiday
+    - summer_sale
+    - back_to_school
+    - spring
+  objective:
+    - prospecting
+    - retargeting
+    - awareness
+    - consideration
+    - conversion
+    - loyalty
+    - engagement
+  geo:
+    - us
+    - eu
+    - uk
+    - de
+    - es
+    - fr
+    - apac
+    - latam
+    - global
+  product:
+    - electronics
+    - fashion
+    - beauty
+    - fitness
+    - home
+    - food
+    - tech
+    - travel
+    - saas
+    - fintech
+  funnel_stage:
+    - tofu
+    - mofu
+    - bofu
+  audience:
+    - lookalike
+    - broad
+    - custom
+    - interest_based
+    - demographic
+    - behavioral
+    - remarketing
+
+metric_ranges:
+  ctr:
+    min: 0.001
+    max: 0.12
+    mean: 0.027
+    std: 0.012
+  cpc:
+    min: 0.2
+    max: 10.0
+    mean: 1.8
+    std: 0.6
+  cpm:
+    min: 5.0
+    max: 50.0
+    mean: 18.0
+    std: 8.0
+  conversion_rate:
+    min: 0.02
+    max: 0.15
+    mean: 0.067
+    std: 0.025
+  roas:
+    min: 1.5
+    max: 8.0
+    mean: 3.5
+    std: 1.2
+  daily_budget_per_campaign:
+    min: 1000
+    max: 5000
+    mean: 2500
+    std: 800
+  session_duration_seconds:
+    min: 10
+    max: 600
+    mean: 125
+    std: 45
+  pages_per_session:
+    min: 1
+    max: 15
+    mean: 3.2
+    std: 1.8
+  conversion_value:
+    min: 20
+    max: 800
+    mean: 180
+    std: 60
+
+device_distribution:
+  mobile: 0.68
+  desktop: 0.25
+  tablet: 0.07
+
+country_distribution:
+  us: 0.45
+  uk: 0.15
+  de: 0.12
+  es: 0.10
+  fr: 0.08
+  other: 0.10
+
+time_of_day_distribution:
+  morning: 0.20
+  day: 0.50
+  evening: 0.30
+
+day_of_week_patterns:
+  weekday_multiplier: 1.0
+  weekend_multiplier: 0.75
+
+user_behavior_patterns:
+  user_pool_size: 50000
+  daily_return_rate: 0.10
+  new_user_rate: 0.90
+  session_conversion_rate_baseline: 0.067
+  avg_touchpoints_per_conversion: 2.5
+  touchpoint_time_window_hours: 168
+
+campaign_lifecycle_defaults:
+  min_campaign_duration_days: 7
+  max_campaign_duration_days: 90
+  typical_campaign_duration_days: 30
+  campaigns_active_simultaneously_min: 15
+  campaigns_active_simultaneously_max: 25
+  new_campaigns_per_week_min: 1
+  new_campaigns_per_week_max: 3
+  campaign_pause_probability: 0.05
+  campaign_end_probability: 0.08
+
+data_generation_rules:
+  daily_total_rows: 5000
+  row_distribution:
+    sessions: 2200
+    attribution_touchpoints: 2500
+    conversions: 150
+    campaigns_daily: 20
+    ad_creatives: 130
+  compression_codec: snappy
+  partition_format: "year={yyyy}/month={mm}/day={dd}"

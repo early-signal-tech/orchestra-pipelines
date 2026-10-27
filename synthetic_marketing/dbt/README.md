@@ -1,10 +1,10 @@
 # Marketing Analytics dbt Project (MotherDuck)
 
-dbt models on top of the marketing tables that `utils/motherduck_loader.py` writes to the MotherDuck database `PLACEHOLDER_DATABASE` (set `MOTHERDUCK_DATABASE`; schema `main`). Models are built in schema `analytics` of the same database.
+dbt models on top of the marketing tables that the pipeline load tasks write to the MotherDuck database `PLACEHOLDER_DATABASE` (set `MOTHERDUCK_DATABASE`; schema `main`). Models are built in schema `analytics` of the same database.
 
 ## Prerequisites
 
-- The six raw tables already loaded (root README, `--load-to-motherduck`).
+- The six raw tables already loaded (the pipeline's load stage, see the root README).
 - `MOTHERDUCK_TOKEN` exported in your shell. `profiles.yml` holds no secrets.
 
 ## Setup
