@@ -18,7 +18,7 @@ Status: **pending**. The code is a copy of a private source repo (`main` at `644
 ## Orchestra setup
 
 - Bucket `synthetic-marketing-data` and region `eu-west-3` are written in `pipelines/synthetic_marketing.yaml`. The database name lives in the MotherDuck connection and in the `DBT_CORE` connection's `profiles.yml`, not in the repo (the code placeholder is `PLACEHOLDER_DATABASE`).
-- The Python connection must clone this repo and link the S3 connection, so the generate task receives the S3 keys as `AWS_S3__<connection>__<field>` variables (Orchestra rejects `AWS_*` names in task env vars). Field names are unconfirmed: the generator prints the variable names it finds, never the values.
+- The Python connection must clone this repo and link the S3 connection, so the generate task receives the S3 keys as `AWS_S3__<connection>__<field>` variables (Orchestra rejects `AWS_*` names in task env vars). the generator reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION` from them (confirmed names), and prints the variable names it finds, never the values.
 - The SQL tasks name the MotherDuck connection with `connection:`.
 
 ## Secrets

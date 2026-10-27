@@ -51,7 +51,7 @@ CONFIG_PATH = "config.yaml"
 
 def _linked(field: str):
     """Value of an AWS_S3__<connection>__<field> variable that Orchestra exports from a linked connection."""
-    return next((v for k, v in os.environ.items() if k.startswith("AWS_S3__") and k.endswith(field)), None)
+    return next((v for k, v in os.environ.items() if k.startswith("AWS_S3__") and k.endswith("__AWS_" + field)), None)
 
 
 # ============================================================
