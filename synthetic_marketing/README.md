@@ -15,18 +15,22 @@ Status: **pending**. The code is a copy of a private source repo (`main` at `644
 - [`python/`](python/): generator (`src/`), `config.yaml`, `pyproject.toml`.
 - [`dbt/`](dbt/): dbt project on MotherDuck, see its README.
 
-## Pending names
+## Orchestra variables
 
-The S3 bucket and the MotherDuck database are not decided. The real names are not kept in this repo. Set them with the `S3_BUCKET` and `MOTHERDUCK_DATABASE` pipeline variables.
+Names are not kept in this repo. Define these as Orchestra `ENV` variables (the pipeline reads them with `${{ ENV.NAME }}`):
 
-| Name | Placeholder | Where |
-|---|---|---|
-| S3 bucket | `PLACEHOLDER_BUCKET` | `S3_BUCKET` (generator and the SQL tasks) |
-| MotherDuck database | `PLACEHOLDER_DATABASE` | the MotherDuck connection (SQL tasks); `MOTHERDUCK_DATABASE` (dbt) |
+| Variable | Used by |
+|---|---|
+| `S3_BUCKET`, `S3_REGION` | generate and the SQL tasks |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | generate (Orchestra rejects `AWS_*` names in Python task env vars) |
+| `MOTHERDUCK_CONNECTION` | the SQL tasks (`connection:`) |
+| `MOTHERDUCK_DATABASE` | dbt |
+
+The code placeholders are `PLACEHOLDER_BUCKET` and `PLACEHOLDER_DATABASE`.
 
 ## Secrets
 
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` come from the Python connection or environment variables; the MotherDuck token lives in the Orchestra connection. None is stored in the repo.
+The MotherDuck token lives in the Orchestra connection. No secret is stored in the repo.
 
 The SQL tasks read S3 from MotherDuck, which needs a persistent S3 secret. Create it once, outside the pipeline, with your own keys:
 

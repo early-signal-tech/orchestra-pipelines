@@ -45,7 +45,7 @@ pipeline:
             pip install .
             %%
           environment_variables: %json
-            { "S3_BUCKET": "${{ ENV.S3_BUCKET }}" }
+            { "S3_BUCKET": "${{ ENV.S3_BUCKET }}", "S3_REGION": "${{ ENV.S3_REGION }}", "S3_ACCESS_KEY_ID": "${{ ENV.S3_ACCESS_KEY_ID }}", "S3_SECRET_ACCESS_KEY": "${{ ENV.S3_SECRET_ACCESS_KEY }}" }
             %%
           set_outputs: false
           .
@@ -61,6 +61,7 @@ pipeline:
         name: 'Validate generated data'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -105,6 +106,7 @@ pipeline:
         name: 'Create tables if missing'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -130,6 +132,7 @@ pipeline:
         name: 'Load campaigns_daily'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -149,6 +152,7 @@ pipeline:
         name: 'Load sessions'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -168,6 +172,7 @@ pipeline:
         name: 'Load conversions'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -187,6 +192,7 @@ pipeline:
         name: 'Load ad_creatives'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -206,6 +212,7 @@ pipeline:
         name: 'Load attribution_touchpoints'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql
@@ -225,6 +232,7 @@ pipeline:
         name: 'Load metadata_snapshots'
         integration: MOTHERDUCK
         integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: '${{ ENV.MOTHERDUCK_CONNECTION }}'
         depends_on: <>
         parameters:
           query: %sql

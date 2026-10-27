@@ -757,9 +757,10 @@ def run_dlt_pipeline(run_date: date, batch_size: int = 1000):
             destination=filesystem(
                 bucket_url=f"s3://{S3_BUCKET}",
                 credentials={
-                    "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
-                    "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-                    "region_name": os.getenv("AWS_REGION", "us-east-1"),
+                    # S3_* names because Orchestra rejects AWS_* in task env vars
+                    "aws_access_key_id": os.getenv("S3_ACCESS_KEY_ID") or os.getenv("AWS_ACCESS_KEY_ID"),
+                    "aws_secret_access_key": os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY"),
+                    "region_name": os.getenv("S3_REGION") or os.getenv("AWS_REGION", "us-east-1"),
                 },
                 layout="{table_name}/year={YYYY}/month={MM}/day={DD}/{table_name}_batch_{file_id}.parquet",
                 current_datetime=pendulum.datetime(run_date.year, run_date.month, run_date.day),
