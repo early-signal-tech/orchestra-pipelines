@@ -1,0 +1,16 @@
+name: 'marketing_analytics'
+version: '1.0.0'
+profile: 'marketing_analytics'
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  marketing_analytics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: view

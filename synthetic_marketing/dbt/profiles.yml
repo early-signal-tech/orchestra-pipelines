@@ -1,0 +1,9 @@
+# The MotherDuck token is read from the MOTHERDUCK_TOKEN environment variable (never stored here).
+marketing_analytics:
+  target: prod
+  outputs:
+    prod:
+      type: duckdb
+      path: "md:{{ env_var('MOTHERDUCK_DATABASE') }}"
+      schema: "{{ var('schema', 'analytics') }}"
+      threads: 4
