@@ -30,6 +30,7 @@ pipeline:
         name: 'Generate one day to S3'
         integration: PYTHON
         integration_job: PYTHON_EXECUTE_SCRIPT
+        connection: early_signal___python_68602
         depends_on: <>
         parameters:
           source: GIT
@@ -259,11 +260,13 @@ pipeline:
         name: 'dbt build'
         integration: DBT_CORE
         integration_job: DBT_CORE_EXECUTE
+        connection: early_signal___dbt___synthetic_marketing_data_06486
         depends_on: <>
         parameters:
           commands: %bash
             dbt build
             %%
+          branch: '${{ inputs.python_branch }}'
           project_dir: 'synthetic_marketing/dbt'
           shallow_clone_dirs: 'synthetic_marketing/dbt'
           package_manager: PIP
