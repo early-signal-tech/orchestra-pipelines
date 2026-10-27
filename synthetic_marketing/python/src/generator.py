@@ -44,7 +44,7 @@ load_dotenv()
 # Configuration
 LOCAL_MODE = os.getenv("LOCAL_MODE", "false").lower() == "true"
 LOCAL_OUTPUT_DIR = Path("./data/output")
-S3_BUCKET = os.getenv("AWS_BUCKET", os.getenv("S3_BUCKET"))
+S3_BUCKET = os.getenv("S3_BUCKET")
 S3_PREFIX = "marketing"
 CONFIG_PATH = "config.yaml"
 

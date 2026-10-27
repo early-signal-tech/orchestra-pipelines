@@ -45,7 +45,7 @@ pipeline:
             pip install .
             %%
           environment_variables: %json
-            { "AWS_BUCKET": "${{ ENV.AWS_BUCKET }}" }
+            { "S3_BUCKET": "${{ ENV.S3_BUCKET }}" }
             %%
           set_outputs: false
           .
@@ -64,8 +64,8 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
-            WITH c AS (SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), s AS (SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
-                 t AS (SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), v AS (SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
+            WITH c AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), s AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
+                 t AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), v AS (SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
             checks AS (
               SELECT 'total_rows_outside_4000_6000' AS check_name,
                      CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
@@ -108,12 +108,12 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
-            CREATE TABLE IF NOT EXISTS campaigns_daily AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS sessions AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS conversions AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS ad_creatives AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS attribution_touchpoints AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
-            CREATE TABLE IF NOT EXISTS metadata_snapshots AS SELECT * FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS campaigns_daily AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS sessions AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS conversions AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS ad_creatives AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS attribution_touchpoints AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS metadata_snapshots AS SELECT * FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
             
             %%
           set_outputs: false
@@ -136,7 +136,7 @@ pipeline:
             INSERT INTO campaigns_daily
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM campaigns_daily tgt WHERE tgt.campaign_id = src.campaign_id AND tgt.date = src.date)
@@ -155,7 +155,7 @@ pipeline:
             INSERT INTO sessions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM sessions tgt WHERE tgt.session_id = src.session_id)
@@ -174,7 +174,7 @@ pipeline:
             INSERT INTO conversions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM conversions tgt WHERE tgt.conversion_id = src.conversion_id)
@@ -193,7 +193,7 @@ pipeline:
             INSERT INTO ad_creatives
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM ad_creatives tgt WHERE tgt.creative_id = src.creative_id AND tgt.date = src.date)
@@ -212,7 +212,7 @@ pipeline:
             INSERT INTO attribution_touchpoints
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM attribution_touchpoints tgt WHERE tgt.touchpoint_id = src.touchpoint_id)
@@ -231,7 +231,7 @@ pipeline:
             INSERT INTO metadata_snapshots
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
-              FROM read_parquet('s3://${{ ENV.AWS_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+              FROM read_parquet('s3://${{ ENV.S3_BUCKET }}/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest
               AND NOT EXISTS (SELECT 1 FROM metadata_snapshots tgt WHERE tgt.entity_id = src.entity_id AND tgt.date = src.date)

@@ -17,11 +17,11 @@ Status: **pending**. The code is a copy of a private source repo (`main` at `644
 
 ## Pending names
 
-The S3 bucket and the MotherDuck database are not decided. The real names are not kept in this repo. Set them with the `AWS_BUCKET` and `MOTHERDUCK_DATABASE` pipeline variables.
+The S3 bucket and the MotherDuck database are not decided. The real names are not kept in this repo. Set them with the `S3_BUCKET` and `MOTHERDUCK_DATABASE` pipeline variables.
 
 | Name | Placeholder | Where |
 |---|---|---|
-| S3 bucket | `PLACEHOLDER_BUCKET` | `AWS_BUCKET` (generator and the SQL tasks) |
+| S3 bucket | `PLACEHOLDER_BUCKET` | `S3_BUCKET` (generator and the SQL tasks) |
 | MotherDuck database | `PLACEHOLDER_DATABASE` | the MotherDuck connection (SQL tasks); `MOTHERDUCK_DATABASE` (dbt) |
 
 ## Secrets
