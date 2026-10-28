@@ -121,7 +121,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM campaigns_daily WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO campaigns_daily
             WITH src AS (
@@ -129,7 +128,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
       load_sessions:
         name: Load sessions
@@ -139,7 +137,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM sessions WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO sessions
             WITH src AS (
@@ -147,7 +144,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
       load_conversions:
         name: Load conversions
@@ -157,7 +153,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM conversions WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO conversions
             WITH src AS (
@@ -165,7 +160,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
       load_ad_creatives:
         name: Load ad_creatives
@@ -175,7 +169,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM ad_creatives WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO ad_creatives
             WITH src AS (
@@ -183,7 +176,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
       load_attribution_touchpoints:
         name: Load attribution_touchpoints
@@ -193,7 +185,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM attribution_touchpoints WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO attribution_touchpoints
             WITH src AS (
@@ -201,7 +192,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
       load_metadata_snapshots:
         name: Load metadata_snapshots
@@ -211,7 +201,6 @@ pipeline:
         depends_on: []
         parameters:
           query: |
-            BEGIN;
             DELETE FROM metadata_snapshots WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO metadata_snapshots
             WITH src AS (
@@ -219,7 +208,6 @@ pipeline:
               FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
             WHERE COALESCE(_dlt_load_id, '') = _latest;
-            COMMIT;
           set_outputs: false
   stage_dbt:
     name: dbt
