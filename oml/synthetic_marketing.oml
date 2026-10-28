@@ -1,0 +1,269 @@
+version: v1
+name: 'Synthetic Marketing'
+configuration:
+  concurrency:
+    max_active: 1
+    on_limit: SKIP
+    .
+  .
+inputs:
+  python_branch:
+    type: string
+    default: main
+    .
+  .
+alerts:
+  - name: 'On Failure'
+    statuses:
+      - FAILED
+    destinations:
+      - integration: SLACK
+        destination: '#agent-slack-alerts'
+        .
+    .
+pipeline:
+  stage_generate:
+    name: Generate
+    depends_on: <>
+    tasks:
+      generate:
+        name: 'Generate one day to S3'
+        integration: PYTHON
+        integration_job: PYTHON_EXECUTE_SCRIPT
+        connection: early_signal___python_68602
+        depends_on: <>
+        parameters:
+          source: GIT
+          command: %bash
+            python src/generator.py
+            %%
+          project_dir: 'synthetic_marketing/python'
+          shallow_clone_dirs: 'synthetic_marketing/python'
+          branch: '${{ inputs.python_branch }}'
+          package_manager: PIP
+          python_version: '3.12'
+          build_command: %bash
+            pip install .
+            %%
+          environment_variables: %json
+            { "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3" }
+            %%
+          set_outputs: false
+          .
+        .
+      .
+    .
+  stage_validate:
+    name: Validate
+    depends_on:
+      - stage_generate
+    tasks:
+      validate:
+        name: 'Validate generated data'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+                 t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+            m AS (
+              SELECT
+                CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
+                        + (SELECT count(*) FROM t) + (SELECT count(*) FROM v) BETWEEN 4000 AND 6000
+                     THEN 0 ELSE 1 END::BIGINT AS total_rows_outside_4000_6000,
+                (SELECT count(*) FROM s WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = s.campaign_id)) AS sessions_invalid_campaign_id,
+                (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = t.campaign_id)) AS touchpoints_invalid_campaign_id,
+                (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = t.session_id)) AS touchpoints_invalid_session_id,
+                (SELECT count(*) FROM v WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = v.session_id)) AS conversions_invalid_session_id,
+                (SELECT count(*) FROM c WHERE ctr NOT BETWEEN 0.001 AND 0.12) AS ctr_out_of_range,
+                (SELECT count(*) FROM c WHERE cpc NOT BETWEEN 0.2 AND 10.0) AS cpc_out_of_range,
+                (SELECT count(*) FROM v WHERE v.attributed_campaign_id IS DISTINCT FROM (
+                   SELECT any_value(t.campaign_id) FROM t
+                   WHERE t.session_id = v.session_id AND t.touchpoint_position = 1)) AS conversions_not_first_touch
+            ),
+            checks AS (UNPIVOT m ON COLUMNS(*) INTO NAME check_name VALUE bad)
+            SELECT check_name, bad,
+                   CASE WHEN bad > 0 THEN error('Validation failed: ' || check_name || ' (' || bad || ')') ELSE 'ok' END AS result
+            FROM checks
+            
+            %%
+          set_outputs: true
+          .
+        .
+      .
+    .
+  stage_prepare:
+    name: 'Prepare tables'
+    depends_on:
+      - stage_validate
+    tasks:
+      prepare_tables:
+        name: 'Create tables if missing'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            CREATE TABLE IF NOT EXISTS campaigns_daily AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS sessions AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS conversions AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS ad_creatives AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS attribution_touchpoints AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            CREATE TABLE IF NOT EXISTS metadata_snapshots AS SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true) LIMIT 0;
+            
+            %%
+          set_outputs: false
+          .
+        .
+      .
+    .
+  stage_load:
+    name: Load
+    depends_on:
+      - stage_prepare
+    tasks:
+      load_campaigns_daily:
+        name: 'Load campaigns_daily'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO campaigns_daily
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM campaigns_daily tgt WHERE tgt.campaign_id = src.campaign_id AND tgt.date = src.date)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      load_sessions:
+        name: 'Load sessions'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO sessions
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM sessions tgt WHERE tgt.session_id = src.session_id)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      load_conversions:
+        name: 'Load conversions'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO conversions
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM conversions tgt WHERE tgt.conversion_id = src.conversion_id)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      load_ad_creatives:
+        name: 'Load ad_creatives'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO ad_creatives
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM ad_creatives tgt WHERE tgt.creative_id = src.creative_id AND tgt.date = src.date)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      load_attribution_touchpoints:
+        name: 'Load attribution_touchpoints'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO attribution_touchpoints
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM attribution_touchpoints tgt WHERE tgt.touchpoint_id = src.touchpoint_id)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      load_metadata_snapshots:
+        name: 'Load metadata_snapshots'
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: <>
+        parameters:
+          query: %sql
+            INSERT INTO metadata_snapshots
+            WITH src AS (
+              SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
+              FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
+            SELECT * EXCLUDE (_latest) FROM src
+            WHERE COALESCE(_dlt_load_id, '') = _latest
+              AND NOT EXISTS (SELECT 1 FROM metadata_snapshots tgt WHERE tgt.entity_id = src.entity_id AND tgt.date = src.date)
+            
+            %%
+          set_outputs: false
+          .
+        .
+      .
+    .
+  stage_dbt:
+    name: dbt
+    depends_on:
+      - stage_load
+    tasks:
+      dbt_build:
+        name: 'dbt build'
+        integration: DBT_CORE
+        integration_job: DBT_CORE_EXECUTE
+        connection: early_signal___dbt___synthetic_marketing_data_06486
+        depends_on: <>
+        parameters:
+          commands: %bash
+            dbt build
+            %%
+          branch: '${{ inputs.python_branch }}'
+          project_dir: 'synthetic_marketing/dbt'
+          shallow_clone_dirs: 'synthetic_marketing/dbt'
+          package_manager: PIP
+          python_version: '3.12'

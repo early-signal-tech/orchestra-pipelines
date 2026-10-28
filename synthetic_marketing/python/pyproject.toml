@@ -1,0 +1,14 @@
+[project]
+name = "synthetic-marketing"
+version = "0.1.0"
+description = "Synthetic marketing data generator (dlt to S3)"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pyyaml",
+  "python-dotenv",
+  "dlt[s3,filesystem,parquet]>=1.0.0",
+]
+
+[tool.setuptools]
+py-modules = []
