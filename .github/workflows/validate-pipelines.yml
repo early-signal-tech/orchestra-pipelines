@@ -1,0 +1,48 @@
+name: Validate pipelines
+
+# Checks every pipeline definition on a pull request, before it can be merged.
+# Requires repository secret ORCHESTRA_API_KEY for the API check.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - pipelines/**
+      - oml/**
+      - pyproject.toml
+      - .github/workflows/validate-pipelines.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned orchestra-cli and orchestra-lang
+        run: pip install .
+
+      # The CLI reads .oml as plain YAML, so real OML goes through orchestra-lang.
+      - name: OML syntax (orchestra-lang)
+        run: |
+          status=0
+          for f in oml/*.oml; do
+            case "$f" in *-yaml.oml) continue ;; esac
+            echo "::group::$f"
+            python oml/validate_oml.py "$f" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Pipeline schema (Orchestra API)
+        env:
+          ORCHESTRA_API_KEY: ${{ secrets.ORCHESTRA_API_KEY }}
+        run: |
+          status=0
+          for f in pipelines/*.yaml oml/*-yaml.oml; do
+            echo "::group::$f"
+            orchestra pipeline validate "$f" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
