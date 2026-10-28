@@ -236,7 +236,7 @@ data_generation_rules:
   partition_format: "year={yyyy}/month={mm}/day={dd}"
 
 # Production-like data defects, as the share of rows hit per day (0 turns one off).
-# Validate lets them through; dbt tests flag them with severity warn.
+# Validate lets them through; dbt tests tagged data_quality flag them as a WARNING.
 defects:
   unmapped_channel: 0.01         # sessions.channel arrives as a raw platform label
   unknown_device: 0.005          # new device_type nobody mapped

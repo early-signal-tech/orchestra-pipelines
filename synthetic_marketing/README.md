@@ -10,7 +10,7 @@ Synthetic marketing data, end to end in Orchestra, one layer per stage:
 | load | MotherDuck SQL, one task per table | deletes the day's rows and inserts the latest batch, so a same-day rerun replaces the day |
 | dbt | `DBT_CORE_EXECUTE` | `dbt build` without the `data_quality` tests, then those tests in their own task |
 
-The pipeline definition is `pipelines/synthetic_marketing.yaml`.
+The pipeline definition is `pipelines/synthetic_marketing.yaml`. `pipelines/synthetic_marketing_autoheal.yaml` triages its FAILED and WARNING runs with an agent: a code failure gets a fix PR against the failing branch (a human merges it), a data quality warning goes to Slack for a human.
 
 ## Data defects
 
