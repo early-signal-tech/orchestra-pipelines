@@ -14,3 +14,8 @@ models:
       +materialized: view
     marts:
       +materialized: view
+      # With Orchestra state orchestration, rebuild at most once a day; parents inherit it.
+      +freshness:
+        build_after:
+          count: 1
+          period: day
