@@ -66,28 +66,24 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
-            WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
-                 t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet')),
-            checks AS (
-              SELECT 'total_rows_outside_4000_6000' AS check_name,
-                     CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
-                             + (SELECT count(*) FROM t) + (SELECT count(*) FROM v) BETWEEN 4000 AND 6000
-                          THEN 0 ELSE 1 END AS bad
-              UNION ALL SELECT 'sessions_invalid_campaign_id', count(*) FROM s
-                WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = s.campaign_id)
-              UNION ALL SELECT 'touchpoints_invalid_campaign_id', count(*) FROM t
-                WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = t.campaign_id)
-              UNION ALL SELECT 'touchpoints_invalid_session_id', count(*) FROM t
-                WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = t.session_id)
-              UNION ALL SELECT 'conversions_invalid_session_id', count(*) FROM v
-                WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = v.session_id)
-              UNION ALL SELECT 'ctr_out_of_range', count(*) FROM c WHERE ctr NOT BETWEEN 0.001 AND 0.12
-              UNION ALL SELECT 'cpc_out_of_range', count(*) FROM c WHERE cpc NOT BETWEEN 0.2 AND 10.0
-              UNION ALL SELECT 'conversions_not_first_touch', count(*) FROM v
-                WHERE v.attributed_campaign_id IS DISTINCT FROM (
-                  SELECT any_value(t.campaign_id) FROM t
-                  WHERE t.session_id = v.session_id AND t.touchpoint_position = 1)
-            )
+            WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+                 t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+            m AS (
+              SELECT
+                CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
+                        + (SELECT count(*) FROM t) + (SELECT count(*) FROM v) BETWEEN 4000 AND 6000
+                     THEN 0 ELSE 1 END::BIGINT AS total_rows_outside_4000_6000,
+                (SELECT count(*) FROM s WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = s.campaign_id)) AS sessions_invalid_campaign_id,
+                (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = t.campaign_id)) AS touchpoints_invalid_campaign_id,
+                (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = t.session_id)) AS touchpoints_invalid_session_id,
+                (SELECT count(*) FROM v WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = v.session_id)) AS conversions_invalid_session_id,
+                (SELECT count(*) FROM c WHERE ctr NOT BETWEEN 0.001 AND 0.12) AS ctr_out_of_range,
+                (SELECT count(*) FROM c WHERE cpc NOT BETWEEN 0.2 AND 10.0) AS cpc_out_of_range,
+                (SELECT count(*) FROM v WHERE v.attributed_campaign_id IS DISTINCT FROM (
+                   SELECT any_value(t.campaign_id) FROM t
+                   WHERE t.session_id = v.session_id AND t.touchpoint_position = 1)) AS conversions_not_first_touch
+            ),
+            checks AS (UNPIVOT m ON COLUMNS(*) INTO NAME check_name VALUE bad)
             SELECT check_name, bad,
                    CASE WHEN bad > 0 THEN error('Validation failed: ' || check_name || ' (' || bad || ')') ELSE 'ok' END AS result
             FROM checks
