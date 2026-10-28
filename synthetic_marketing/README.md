@@ -10,7 +10,7 @@ Synthetic marketing data, end to end in Orchestra, one layer per stage:
 | load | MotherDuck SQL, one task per table | deletes the day's rows and inserts the latest batch, so a same-day rerun replaces the day |
 | dbt | `DBT_CORE_EXECUTE` | `dbt build` without the `data_quality` tests, then those tests in their own task |
 
-Status: runs in Orchestra (Staging) from `pipelines/synthetic_marketing.yaml`. The code started as a copy of a private source repo (`main` at `64407a2`).
+The pipeline definition is `pipelines/synthetic_marketing.yaml`.
 
 ## Data defects
 
@@ -40,9 +40,6 @@ CREATE SECRET IF NOT EXISTS marketing_s3 IN MOTHERDUCK (
 );
 ```
 
-## Notes from running it
+## Notes
 
-- One `query` can hold several statements (prepare and load use this).
-- `set_outputs` on a SQL task shows the first row of the result in the task message; reading it from a downstream task is not tested.
-- `current_date` on MotherDuck matched the generator's UTC date; a run near midnight UTC is not tested.
 - The load tasks have no explicit transaction (the API rejects a `DELETE` after `BEGIN;`, see `CLAUDE.md`). If an insert fails after its delete, that table is empty for the day until the next run.

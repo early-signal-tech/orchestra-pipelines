@@ -1,5 +1,5 @@
 version: v1
-name: Synthetic Marketing #synthetic-marketing #test
+name: Synthetic Marketing
 # No schedule on purpose: runs are started by hand.
 configuration:
   concurrency:
