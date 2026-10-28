@@ -728,6 +728,19 @@ def inject_defects(data: Dict[str, List[Dict]], rates: Dict[str, float], fail_mo
     a fail_mode breaks validate so the run goes red."""
     _add_warning_defects(data, rates)
     _apply_fail_mode(data, fail_mode)
+    _dedupe_conversions(data)
+
+
+def _dedupe_conversions(data: Dict[str, List[Dict]]) -> None:
+    """conversion_id is the primary key: keep the first row per id so the parquet never
+    carries repeated conversion_ids (validate fails on conversions_duplicate_id)."""
+    seen = set()
+    unique = []
+    for v in data["conversions"]:
+        if v["conversion_id"] not in seen:
+            seen.add(v["conversion_id"])
+            unique.append(v)
+    data["conversions"] = unique
 
 
 def _add_warning_defects(data: Dict[str, List[Dict]], rates: Dict[str, float]) -> None:
