@@ -10,6 +10,7 @@ cleaned as (
         user_id,
         attributed_campaign_id,
         attribution_model,
+        conversion_value,
         conversion_value as revenue,
         timestamp::timestamp as timestamp,
 
