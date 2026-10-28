@@ -11,11 +11,28 @@ inputs:
     type: string
     default: main
     .
+  fail_mode:
+    type: string
+    default: none
+    options:
+      - none
+      - duplicate_conversions
+      - missing_sessions
+    .
   .
 alerts:
   - name: 'On Failure'
     statuses:
       - FAILED
+    destinations:
+      - integration: SLACK
+        destination: '#agent-slack-alerts'
+
+      =
+
+  - name: 'On Warning'
+    statuses:
+      - WARNING
     destinations:
       - integration: SLACK
         destination: '#agent-slack-alerts'
@@ -46,7 +63,7 @@ pipeline:
             pip install .
             %%
           environment_variables: %json
-            { "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3" }
+            { "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3", "FAIL_MODE": "${{ inputs.fail_mode }}" }
             %%
           set_outputs: false
           .
@@ -68,11 +85,17 @@ pipeline:
           query: %sql
             WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
                  t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+            ids AS (SELECT (SELECT max(_dlt_load_id) FROM c) AS c_id, (SELECT max(_dlt_load_id) FROM s) AS s_id,
+                           (SELECT max(_dlt_load_id) FROM t) AS t_id, (SELECT max(_dlt_load_id) FROM v) AS v_id),
             m AS (
               SELECT
                 CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
                         + (SELECT count(*) FROM t) + (SELECT count(*) FROM v) BETWEEN 4000 AND 6000
                      THEN 0 ELSE 1 END::BIGINT AS total_rows_outside_4000_6000,
+                (SELECT (s_id IS DISTINCT FROM c_id OR t_id IS DISTINCT FROM c_id OR v_id IS DISTINCT FROM c_id)::BIGINT FROM ids) AS tables_from_different_loads,
+                (SELECT count(*) - count(DISTINCT session_id) FROM s) AS sessions_duplicate_id,
+                (SELECT count(*) - count(DISTINCT touchpoint_id) FROM t) AS touchpoints_duplicate_id,
+                (SELECT count(*) - count(DISTINCT conversion_id) FROM v) AS conversions_duplicate_id,
                 (SELECT count(*) FROM s WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = s.campaign_id)) AS sessions_invalid_campaign_id,
                 (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = t.campaign_id)) AS touchpoints_invalid_campaign_id,
                 (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = t.session_id)) AS touchpoints_invalid_session_id,
@@ -133,13 +156,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM campaigns_daily WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO campaigns_daily
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM campaigns_daily tgt WHERE tgt.campaign_id = src.campaign_id AND tgt.date = src.date)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -153,13 +176,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM sessions WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO sessions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM sessions tgt WHERE tgt.session_id = src.session_id)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -173,13 +196,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM conversions WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO conversions
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM conversions tgt WHERE tgt.conversion_id = src.conversion_id)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -193,13 +216,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM ad_creatives WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO ad_creatives
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/ad_creatives/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM ad_creatives tgt WHERE tgt.creative_id = src.creative_id AND tgt.date = src.date)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -213,13 +236,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM attribution_touchpoints WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO attribution_touchpoints
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM attribution_touchpoints tgt WHERE tgt.touchpoint_id = src.touchpoint_id)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -233,13 +256,13 @@ pipeline:
         depends_on: <>
         parameters:
           query: %sql
+            DELETE FROM metadata_snapshots WHERE year = year(current_date) AND month = month(current_date) AND day = day(current_date);
             INSERT INTO metadata_snapshots
             WITH src AS (
               SELECT *, max(COALESCE(_dlt_load_id, '')) OVER () AS _latest
               FROM read_parquet('s3://synthetic-marketing-data/marketing/metadata_snapshots/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet', hive_partitioning=true, union_by_name=true))
             SELECT * EXCLUDE (_latest) FROM src
-            WHERE COALESCE(_dlt_load_id, '') = _latest
-              AND NOT EXISTS (SELECT 1 FROM metadata_snapshots tgt WHERE tgt.entity_id = src.entity_id AND tgt.date = src.date)
+            WHERE COALESCE(_dlt_load_id, '') = _latest;
             
             %%
           set_outputs: false
@@ -260,7 +283,26 @@ pipeline:
         depends_on: <>
         parameters:
           commands: %bash
-            dbt build
+            dbt build --exclude tag:data_quality
+            %%
+          branch: '${{ inputs.python_branch }}'
+          project_dir: 'synthetic_marketing/dbt'
+          shallow_clone_dirs: 'synthetic_marketing/dbt'
+          package_manager: PIP
+          python_version: '3.12'
+          .
+        .
+      dbt_quality:
+        name: 'dbt data quality tests'
+        integration: DBT_CORE
+        integration_job: DBT_CORE_EXECUTE
+        connection: early_signal___dbt___synthetic_marketing_data_06486
+        depends_on:
+          - dbt_build
+        treat_failure_as_warning: true
+        parameters:
+          commands: %bash
+            dbt test --select tag:data_quality
             %%
           branch: '${{ inputs.python_branch }}'
           project_dir: 'synthetic_marketing/dbt'

@@ -234,3 +234,13 @@ data_generation_rules:
     ad_creatives: 130
   compression_codec: snappy
   partition_format: "year={yyyy}/month={mm}/day={dd}"
+
+# Production-like data defects, as the share of rows hit per day (0 turns one off).
+# Validate lets them through; dbt tests flag them with severity warn.
+defects:
+  unmapped_channel: 0.01         # sessions.channel arrives as a raw platform label
+  unknown_device: 0.005          # new device_type nobody mapped
+  overspend: 0.10                # campaign spend above 1.2x its daily budget
+  clicks_over_impressions: 0.02  # creative tracker double counts clicks
+  bad_conversion_value: 0.03     # refund sign flipped, or value sent in cents
+  late_conversions: 0.05         # conversion events arriving days late

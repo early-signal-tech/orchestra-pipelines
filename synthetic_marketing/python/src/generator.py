@@ -47,6 +47,7 @@ LOCAL_OUTPUT_DIR = Path("./data/output")
 S3_BUCKET = os.getenv("S3_BUCKET")
 S3_PREFIX = "marketing"
 CONFIG_PATH = "config.yaml"
+FAIL_MODE = os.getenv("FAIL_MODE") or "none"
 
 
 def _linked(field: str):
@@ -697,7 +698,7 @@ def generate_marketing_data(run_date: date) -> Dict[str, List[Dict]]:
             }
         )
 
-    return {
+    data = {
         "sessions": sessions,
         "touchpoints": touchpoints,
         "conversions": conversions,
@@ -705,6 +706,52 @@ def generate_marketing_data(run_date: date) -> Dict[str, List[Dict]]:
         "creatives": creatives,
         "metadata": metadata,
     }
+    inject_defects(data, config.get("defects", {}), FAIL_MODE)
+    return data
+
+
+# ============================================================
+# DATA DEFECTS
+# ============================================================
+
+
+def _pick(rows: List[Dict], rate: float) -> List[Dict]:
+    """A random share of rows, at least one when the rate is above zero."""
+    if not rows or rate <= 0:
+        return []
+    size = min(len(rows), max(1, int(len(rows) * rate)))
+    return [rows[i] for i in np.random.choice(len(rows), size=size, replace=False)]
+
+
+def inject_defects(data: Dict[str, List[Dict]], rates: Dict[str, float], fail_mode: str) -> None:
+    """Add production-like defects: the rates pass validate and dbt flags them as warnings,
+    a fail_mode breaks validate so the run goes red."""
+    _add_warning_defects(data, rates)
+    _apply_fail_mode(data, fail_mode)
+
+
+def _add_warning_defects(data: Dict[str, List[Dict]], rates: Dict[str, float]) -> None:
+    for s in _pick(data["sessions"], rates.get("unmapped_channel", 0)):
+        s["channel"] = str(np.random.choice(["Meta", "fb", "ig", "google ads"]))
+    for s in _pick(data["sessions"], rates.get("unknown_device", 0)):
+        s["device_type"] = "smart_tv"
+    for c in _pick(data["campaigns"], rates.get("overspend", 0)):
+        c["spend"] = round(c["daily_budget"] * np.random.uniform(1.3, 1.8), 2)
+    for cr in _pick(data["creatives"], rates.get("clicks_over_impressions", 0)):
+        cr["clicks"] = cr["impressions"] + int(np.random.randint(1, 50))
+    for v in _pick(data["conversions"], rates.get("bad_conversion_value", 0)):
+        v["conversion_value"] = -v["conversion_value"] if np.random.rand() < 0.5 else round(v["conversion_value"] * 100, 2)
+    for v in _pick(data["conversions"], rates.get("late_conversions", 0)):
+        v["timestamp"] = (datetime.fromisoformat(v["timestamp"]) - timedelta(days=int(np.random.randint(3, 10)))).isoformat()
+
+
+def _apply_fail_mode(data: Dict[str, List[Dict]], fail_mode: str) -> None:
+    if fail_mode == "duplicate_conversions":
+        data["conversions"] += [dict(v) for v in _pick(data["conversions"], 0.05)]
+    elif fail_mode == "missing_sessions":
+        data["sessions"] = []
+    elif fail_mode != "none":
+        raise ValueError(f"Unknown FAIL_MODE: {fail_mode}")
 
 
 # ============================================================
@@ -731,6 +778,7 @@ def run_dlt_pipeline(run_date: date, batch_size: int = 1000):
     # Step 1: Generate data
     print("1. Generating marketing data...")
     data = generate_marketing_data(run_date)
+    print(f"   Fail mode: {FAIL_MODE}")
 
     for table, rows in data.items():
         print(f"   {table}: {len(rows)} rows")
