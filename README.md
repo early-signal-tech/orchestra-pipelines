@@ -108,4 +108,6 @@ orchestra pipeline validate oml/daily-sales-yaml.oml
 - [`oml/daily-sales.oml`](oml/daily-sales.oml): real OML (`%sql ... %%`). The CLI rejects it; `validate_oml.py` passes it.
 - [`oml/daily-sales-yaml.oml`](oml/daily-sales-yaml.oml): the same pipeline as plain YAML, no schedule. The CLI accepts it.
 
+[`.github/workflows/validate-pipelines.yml`](.github/workflows/validate-pipelines.yml) runs both checks on every pull request: real OML through `validate_oml.py`, `pipelines/*.yaml` and `*-yaml.oml` through the CLI. It needs the repository secret `ORCHESTRA_API_KEY`.
+
 The Claude plugin config for the `orchestra-skills` marketplace lives in [`.claude/settings.json`](.claude/settings.json). Run-time gotchas are in [`CLAUDE.md`](CLAUDE.md).
