@@ -7,10 +7,17 @@ Synthetic marketing data, end to end in Orchestra, one layer per stage:
 | generate | Python (`PYTHON_EXECUTE_SCRIPT`) | dlt writes one day of Parquet to S3 |
 | validate | MotherDuck SQL | reads the day's Parquet from S3, fails the run on any broken check |
 | prepare | MotherDuck SQL | creates the six tables if missing |
-| load | MotherDuck SQL, one task per table | inserts the day's rows, skipping primary keys already loaded |
-| dbt | `DBT_CORE_EXECUTE` | builds the models |
+| load | MotherDuck SQL, one task per table | deletes the day's rows and inserts the latest batch, so a same-day rerun replaces the day |
+| dbt | `DBT_CORE_EXECUTE` | `dbt build` without the `data_quality` tests, then those tests in their own task |
 
-Status: **pending**. The code is a copy of a private source repo (`main` at `64407a2`). The pipeline draft is `pipelines/synthetic_marketing.yaml`; nothing here has run in Orchestra. The SQL was checked locally with DuckDB 1.5.6 on one generated day (second load adds 0 rows; a broken attribution makes validate fail), not on MotherDuck.
+Status: runs in Orchestra (Staging) from `pipelines/synthetic_marketing.yaml`. The code started as a copy of a private source repo (`main` at `64407a2`).
+
+## Data defects
+
+The generator adds production-like problems so the pipeline has something to report:
+
+- **Always on, small share of rows** (rates in `python/config.yaml` under `defects`): unmapped channel, unknown device, overspend, clicks above impressions, bad conversion values, late conversions. Validate lets them through; the dbt tests tagged `data_quality` catch them. That task has `treat_failure_as_warning: true`, so the run ends as WARNING (amber), not FAILED. A dbt `severity: warn` would not work here: dbt exits 0 and Orchestra reports success.
+- **On demand, pipeline input `fail_mode`**: `duplicate_conversions` (a retried delivery) or `missing_sessions` (a file that never arrived). Validate fails the run (red) and nothing is loaded.
 
 - [`python/`](python/): generator (`src/`), `config.yaml`, `pyproject.toml`.
 - [`dbt/`](dbt/): dbt project on MotherDuck, see its README.
@@ -33,8 +40,9 @@ CREATE SECRET IF NOT EXISTS marketing_s3 IN MOTHERDUCK (
 );
 ```
 
-## Unverified in Orchestra
+## Notes from running it
 
-- Whether `query` accepts several statements (the prepare task sends six `CREATE TABLE IF NOT EXISTS`).
-- What `set_outputs` returns for SQL (the validate task sets it).
-- Which timezone `current_date` uses on MotherDuck (the generator uses the container date, UTC).
+- One `query` can hold several statements (prepare and load use this).
+- `set_outputs` on a SQL task shows the first row of the result in the task message; reading it from a downstream task is not tested.
+- `current_date` on MotherDuck matched the generator's UTC date; a run near midnight UTC is not tested.
+- The load tasks have no explicit transaction (the API rejects a `DELETE` after `BEGIN;`, see `CLAUDE.md`). If an insert fails after its delete, that table is empty for the day until the next run.

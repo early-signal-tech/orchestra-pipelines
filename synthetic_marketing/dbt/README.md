@@ -34,7 +34,7 @@ dbt test  --profiles-dir .
 | marts | `campaign_performance`, `channel_attribution`, `daily_summary`, `user_journey` | view |
 | marts | `int_ads`, `int_conversions`, `int_sessions` | table |
 
-Tests (`not_null`, `unique`) are declared in the `_*.yml` files next to the models.
+Tests (`not_null`, `unique`) are declared in the `_*.yml` files next to the models. Data quality tests (accepted values on sessions, and the singular tests in `tests/`) carry the tag `data_quality`; the pipeline runs them in a separate task, see the root README.
 
 ## Notes
 
