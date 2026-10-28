@@ -46,7 +46,7 @@ pipeline:
             2. Classify into exactly one verdict:
                - FIX: the run FAILED because of a code or config issue in git that an agent can safely fix with a PR (dbt model, Python bug, SQL in the repo).
                - RETRY: transient (timeout, rate limit, vendor outage, network blip).
-               - ESCALATE: needs a human: credentials, permissions, upstream data quality, business logic ambiguity. A run that ended WARNING because the `dbt data quality tests` task found bad rows is always ESCALATE: the data is wrong, not the code.
+               - ESCALATE: needs a human: credentials, permissions, upstream data quality, business logic ambiguity. A run that ended WARNING because the `dbt data quality tests` task found bad rows is always ESCALATE: the data is wrong, not the code. A run whose fail_mode input is anything other than 'none' is a deliberate failure injection, so it is always ESCALATE, never FIX: the generator broke the data on purpose.
                - IGNORE: the run's python_branch input starts with 'agent-fix/' (a fix rerun), or it is already being handled.
                Runs on other branches (for example 'demo/...') are NOT ignored.
             3. Set these task outputs:
