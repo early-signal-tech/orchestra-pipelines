@@ -87,7 +87,7 @@ sources:
                   arguments:
                     values: [google, linkedin, meta, pinterest, reddit, snapchat, tiktok, twitter]
                   config:
-                    severity: warn
+                    tags: [data_quality]
           - name: session_start
             description: Timestamp when the session started
           - name: session_duration_sec
@@ -102,7 +102,7 @@ sources:
                   arguments:
                     values: [desktop, mobile, tablet]
                   config:
-                    severity: warn
+                    tags: [data_quality]
           - name: country
             description: Country of the user
           - name: year

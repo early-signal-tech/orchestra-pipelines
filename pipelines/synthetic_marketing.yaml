@@ -221,7 +221,23 @@ pipeline:
         connection: early_signal___dbt___synthetic_marketing_data_06486
         depends_on: []
         parameters:
-          commands: dbt build
+          commands: dbt build --exclude tag:data_quality
+          branch: ${{ inputs.python_branch }}
+          project_dir: synthetic_marketing/dbt
+          shallow_clone_dirs: synthetic_marketing/dbt
+          package_manager: PIP
+          python_version: '3.12'
+      # Data quality findings show as WARNING (amber) instead of failing the run.
+      dbt_quality:
+        name: dbt data quality tests
+        integration: DBT_CORE
+        integration_job: DBT_CORE_EXECUTE
+        connection: early_signal___dbt___synthetic_marketing_data_06486
+        depends_on:
+        - dbt_build
+        treat_failure_as_warning: true
+        parameters:
+          commands: dbt test --select tag:data_quality
           branch: ${{ inputs.python_branch }}
           project_dir: synthetic_marketing/dbt
           shallow_clone_dirs: synthetic_marketing/dbt
