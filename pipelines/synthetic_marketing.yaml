@@ -1,7 +1,6 @@
 version: v1
 name: Synthetic Marketing #synthetic-marketing #test
-# Draft, not deployed. Bucket and MotherDuck database names are placeholders (see synthetic_marketing/README.md).
-# No schedule on purpose: add one only after a manual run passes.
+# No schedule on purpose: runs are started by hand.
 configuration:
   concurrency:
     max_active: 1
@@ -10,9 +9,18 @@ inputs:
   python_branch:
     type: string
     default: main
+  fail_mode:
+    type: string
+    default: none
+    options: [none, duplicate_conversions, missing_sessions]
 alerts:
 - name: On Failure
   statuses: [FAILED]
+  destinations:
+  - integration: SLACK
+    destination: '#agent-slack-alerts'
+- name: On Warning
+  statuses: [WARNING]
   destinations:
   - integration: SLACK
     destination: '#agent-slack-alerts'
@@ -36,7 +44,7 @@ pipeline:
           package_manager: PIP
           python_version: '3.12'
           build_command: pip install .
-          environment_variables: '{ "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3" }'
+          environment_variables: '{ "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3", "FAIL_MODE": "${{ inputs.fail_mode }}" }'
           set_outputs: false
   stage_validate:
     name: Validate
@@ -54,11 +62,17 @@ pipeline:
           query: |
             WITH c AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/campaigns_daily/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), s AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/sessions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
                  t AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/attribution_touchpoints/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()), v AS (SELECT * FROM read_parquet('s3://synthetic-marketing-data/marketing/conversions/' || strftime(current_date, 'year=%Y/month=%m/day=%d') || '/*.parquet') QUALIFY _dlt_load_id = max(_dlt_load_id) OVER ()),
+            ids AS (SELECT (SELECT max(_dlt_load_id) FROM c) AS c_id, (SELECT max(_dlt_load_id) FROM s) AS s_id,
+                           (SELECT max(_dlt_load_id) FROM t) AS t_id, (SELECT max(_dlt_load_id) FROM v) AS v_id),
             m AS (
               SELECT
                 CASE WHEN (SELECT count(*) FROM c) + (SELECT count(*) FROM s)
                         + (SELECT count(*) FROM t) + (SELECT count(*) FROM v) BETWEEN 4000 AND 6000
                      THEN 0 ELSE 1 END::BIGINT AS total_rows_outside_4000_6000,
+                (SELECT (s_id IS DISTINCT FROM c_id OR t_id IS DISTINCT FROM c_id OR v_id IS DISTINCT FROM c_id)::BIGINT FROM ids) AS tables_from_different_loads,
+                (SELECT count(*) - count(DISTINCT session_id) FROM s) AS sessions_duplicate_id,
+                (SELECT count(*) - count(DISTINCT touchpoint_id) FROM t) AS touchpoints_duplicate_id,
+                (SELECT count(*) - count(DISTINCT conversion_id) FROM v) AS conversions_duplicate_id,
                 (SELECT count(*) FROM s WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = s.campaign_id)) AS sessions_invalid_campaign_id,
                 (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM c WHERE c.campaign_id = t.campaign_id)) AS touchpoints_invalid_campaign_id,
                 (SELECT count(*) FROM t WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.session_id = t.session_id)) AS touchpoints_invalid_session_id,

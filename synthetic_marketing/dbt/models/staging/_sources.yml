@@ -81,6 +81,13 @@ sources:
             description: Foreign key to ad_creatives
           - name: channel
             description: Source advertising channel
+            data_tests:
+              # Mirrors config.yaml channels as the generator stores them (google_ads becomes google).
+              - accepted_values:
+                  arguments:
+                    values: [google, linkedin, meta, pinterest, reddit, snapchat, tiktok, twitter]
+                  config:
+                    severity: warn
           - name: session_start
             description: Timestamp when the session started
           - name: session_duration_sec
@@ -89,6 +96,13 @@ sources:
             description: Number of pages viewed during session
           - name: device_type
             description: Device type (desktop, mobile, tablet)
+            data_tests:
+              # Mirrors config.yaml device_distribution.
+              - accepted_values:
+                  arguments:
+                    values: [desktop, mobile, tablet]
+                  config:
+                    severity: warn
           - name: country
             description: Country of the user
           - name: year
