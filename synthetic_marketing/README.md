@@ -10,7 +10,7 @@ Synthetic marketing data, end to end in Orchestra, one layer per stage:
 | load | MotherDuck SQL, one task per table | deletes the day's rows and inserts the latest batch, so a same-day rerun replaces the day |
 | dbt | `DBT_CORE_EXECUTE` | `dbt build` without the `data_quality` tests, then those tests in their own task |
 
-The pipeline definition is `pipelines/synthetic_marketing.yaml`. `pipelines/synthetic_marketing_autoheal.yaml` triages its FAILED and WARNING runs with an agent: a code failure gets a fix PR against the failing branch (a human merges it), a data quality warning goes to Slack for a human.
+The pipeline definition is `pipelines/synthetic_marketing.yaml`. `pipelines/synthetic_marketing_autoheal.yaml` triages its FAILED and WARNING runs with an agent: a code failure gets a fix PR against the failing branch (a human merges it), a data quality warning goes to Slack for a human. `pipelines/synthetic_marketing_autoheal_incident.yaml` does the same from an Orchestra incident instead of the failed run: the `Synthetic Marketing` incident monitor sends its alert to this pipeline's webhook trigger (a WEBHOOK connection whose base URL is the pipeline's start URL, with an Orchestra API key as Bearer token), it waits 60 s for the incident's AI diagnosis, and the agent decides from that diagnosis. An incident whose alert budget is spent sends no webhook.
 
 ## Data defects
 
