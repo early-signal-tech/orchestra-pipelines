@@ -16,7 +16,7 @@ select
     t.campaign_id,
     t.timestamp as touchpoint_timestamp,
     c.conversion_id,
-    c.conversion_value,
+    c.revenue as conversion_value,
     c.timestamp as conversion_timestamp,
 
     -- Identify first and last touchpoints per conversion

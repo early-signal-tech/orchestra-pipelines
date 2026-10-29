@@ -10,7 +10,7 @@ select
     date,
     count(distinct conversion_id) as total_conversions,
     count(distinct user_id) as converting_users,
-    sum(conversion_value) as total_revenue,
-    avg(conversion_value) as avg_order_value
+    sum(revenue) as total_revenue,
+    avg(revenue) as avg_order_value
 from conversions
 group by attributed_campaign_id, date

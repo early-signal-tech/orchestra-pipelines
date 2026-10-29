@@ -17,7 +17,7 @@ creative_conversions as (
     select
         s.creative_id,
         count(c.conversion_id) as conversion_count,
-        sum(c.conversion_value) as total_conversion_value
+        sum(c.revenue) as total_conversion_value
     from sessions s
     inner join conversions c on s.session_id = c.session_id
     group by s.creative_id
