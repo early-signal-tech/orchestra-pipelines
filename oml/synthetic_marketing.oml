@@ -66,7 +66,6 @@ pipeline:
             { "S3_BUCKET": "synthetic-marketing-data", "S3_REGION": "eu-west-3", "FAIL_MODE": "${{ inputs.fail_mode }}" }
             %%
           set_outputs: false
-          .
         .
       .
     .
