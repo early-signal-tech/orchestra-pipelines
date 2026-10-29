@@ -31,7 +31,7 @@ ORDERS = [
 
 
 def total_order_amount(orders):
-    return sum(order["amout"] for order in orders)
+    return sum(order["amount"] for order in orders)
 
 
 def main():
