@@ -285,6 +285,7 @@ pipeline:
           commands: %bash
             dbt build --exclude tag:data_quality
             %%
+          use_state_orchestration: true
           branch: '${{ inputs.python_branch }}'
           project_dir: 'synthetic_marketing/dbt'
           shallow_clone_dirs: 'synthetic_marketing/dbt'
