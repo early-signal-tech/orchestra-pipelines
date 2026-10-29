@@ -1,0 +1,147 @@
+version: v1
+name: Synthetic Marketing Auto-heal from Incident
+inputs:
+  alert:
+    type: dict
+  fix_branch_prefix:
+    type: string
+    default: agent-fix/
+  dev_environment:
+    type: string
+    default: Staging
+configuration:
+  concurrency:
+    max_active: 1
+    on_limit: SKIP
+webhook:
+  enabled: true
+  run_inputs:
+    alert: ${{ outputs.payload }}
+alerts:
+  - name: Auto-heal failed
+    statuses: [FAILED]
+    destinations:
+      - integration: SLACK
+        destination: agent-slack-alerts
+        connection_id: slack_connect_47274
+pipeline:
+  wait_for_diagnosis:
+    name: Wait for Triago
+    tasks:
+      wait_60s:
+        name: Give Triago time to diagnose
+        integration: PYTHON
+        integration_job: PYTHON_EXECUTE_SCRIPT
+        connection: early_signal___python_68602
+        parameters:
+          source: INLINE
+          code: import time; time.sleep(60)
+          python_version: '3.12'
+  triage:
+    name: Triage
+    depends_on: [wait_for_diagnosis]
+    tasks:
+      triage_failure:
+        name: Triage from the incident
+        integration: ORCHESTRA
+        integration_job: RUN_AGENT
+        parameters:
+          agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
+          set_outputs: true
+          prompt: |-
+            You are the TRIAGE step. Do NOT change any code, open PRs or rerun anything.
+
+            An Orchestra incident monitor sent this alert for Synthetic Marketing: ${{ inputs.alert }}
+            The incident id is detail.incident_id. If the alert has no incident id, it is not an incident alert: set verdict IGNORE and stop.
+
+            1. Read the incident (get_incident) and its events (list_incident_events). Orchestra's incident diagnosis agent (AI_DIAGNOSIS_COMPLETED event) investigates every new incident and usually finishes 30-60 s after it opens, so it may not be there yet. If there is no AI_DIAGNOSIS_COMPLETED event newer than the incident's latest failure, wait about 15 s (run `sleep 15` if you have a shell) and list the events again; repeat up to 8 times. Once it is there, use that diagnosis as the root cause. Only if it never arrives, open the task run logs yourself.
+            2. Classify into exactly one verdict:
+               - FIX: the run FAILED because of a code or config issue in git that an agent can safely fix with a PR (dbt model, Python bug, SQL in the repo).
+               - RETRY: transient (timeout, rate limit, vendor outage, network blip).
+               - ESCALATE: needs a human: credentials, permissions, upstream data quality, business logic ambiguity. A run that ended WARNING because the `dbt data quality tests` task found bad rows is always ESCALATE: the data is wrong, not the code. A run whose fail_mode input is anything other than 'none' is a deliberate failure injection, so it is always ESCALATE, never FIX: the generator broke the data on purpose.
+               - IGNORE: the latest failed run's python_branch input starts with 'agent-fix/' (a fix rerun), or this incident was already handled (an earlier escalation or fix for the same incident).
+               Runs on other branches (for example 'demo/...') are NOT ignored.
+            3. Set these task outputs:
+               - verdict: one of FIX | RETRY | ESCALATE | IGNORE (exact string)
+               - failed_pipeline_run_id: the latest failed run id in the incident
+               - python_branch: the python_branch input that run used
+               - summary: 2-4 sentences covering the task, root cause (say whether it came from the incident diagnosis), evidence and suggested next step.
+  escalate:
+    name: Escalate to human
+    depends_on: [triage]
+    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] and TASKS['triage_failure'].OUTPUTS['verdict'] == 'ESCALATE' }}
+    tasks:
+      notify_escalation:
+        name: Post escalation to Slack
+        integration: SLACK
+        integration_job: SEND_SLACK_MESSAGE
+        connection: slack_connect_47274
+        parameters:
+          channel_name: agent-slack-alerts
+          text: |-
+            :warning: Synthetic Marketing needs a human, the agent will not change code for this one.
+
+            Run: https://app.getorchestra.io/pipeline-runs/${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }}/lineage
+
+            Triage: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+  retry_transient:
+    name: Retry transient failure
+    depends_on: [triage]
+    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] and TASKS['triage_failure'].OUTPUTS['verdict'] == 'RETRY' }}
+    tasks:
+      retry_failed_run:
+        name: Retry failed run
+        integration: ORCHESTRA
+        integration_job: RUN_AGENT
+        parameters:
+          agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
+          prompt: |-
+            Triage classified this failure as transient: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+
+            Retry pipeline run ${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }} from failed tasks (start_pipeline with retryFromFailed=true), poll until complete, and report the result. Retry at most once. Fail this task if the retry ends FAILED.
+  fix_on_dev:
+    name: Fix on a branch
+    depends_on: [triage]
+    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] and TASKS['triage_failure'].OUTPUTS['verdict'] == 'FIX' }}
+    tasks:
+      fix_and_open_pr:
+        name: Fix, open PR and rerun
+        integration: ORCHESTRA
+        integration_job: RUN_AGENT
+        parameters:
+          agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
+          set_outputs: true
+          prompt: |-
+            You are the FIX step. Triage has already diagnosed this failure.
+
+            Failed run: ${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }}
+            Branch the failed run used: ${{ TASKS['triage_failure'].OUTPUTS['python_branch'] }}
+            Triage summary: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+
+            1. Clone early-signal-tech/orchestra-pipelines, check out the branch the failed run used, and create ${{ inputs.fix_branch_prefix }}<short-description> from it. Implement the minimal fix.
+            2. Open a pull request from your branch into the branch the failed run used (not into main unless that is the branch). Do NOT merge it.
+            3. Start Synthetic Marketing (alias synthetic_marketing) in environment ${{ inputs.dev_environment }} with runInputs python_branch=<your branch>, keeping the failed run's other inputs. Do not wait for it: this pipeline triages the rerun itself.
+            4. Set these task outputs right away, then stop:
+               - pr_url: the pull request URL
+               - fix_branch: the branch name
+               - dev_run_id: the rerun's pipeline run id
+               - fix_summary: what you changed and why.
+            Setting the outputs is required; the next task reads them.
+  notify_pr:
+    name: Announce the PR
+    depends_on: [fix_on_dev]
+    tasks:
+      post_pr:
+        name: Post the PR to Slack
+        integration: SLACK
+        integration_job: SEND_SLACK_MESSAGE
+        connection: slack_connect_47274
+        parameters:
+          channel_name: agent-slack-alerts
+          text: |-
+            :wrench: Agent fix ready for review. A human merges it.
+
+            Triage: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+            Fix: ${{ TASKS['fix_and_open_pr'].OUTPUTS['fix_summary'] }}
+            PR: ${{ TASKS['fix_and_open_pr'].OUTPUTS['pr_url'] }}
+            Rerun on the fix branch: https://app.getorchestra.io/pipeline-runs/${{ TASKS['fix_and_open_pr'].OUTPUTS['dev_run_id'] }}/lineage
