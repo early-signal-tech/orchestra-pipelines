@@ -28,15 +28,12 @@ pipeline:
   wait_for_diagnosis:
     name: Wait for Triago
     tasks:
-      wait_60s:
+      wait_1_min:
         name: Give Triago time to diagnose
-        integration: PYTHON
-        integration_job: PYTHON_EXECUTE_SCRIPT
-        connection: early_signal___python_68602
+        integration: ORCHESTRA
+        integration_job: WAIT
         parameters:
-          source: INLINE
-          code: import time; time.sleep(60)
-          python_version: '3.12'
+          wait_minutes: 1
   triage:
     name: Triage
     depends_on: [wait_for_diagnosis]
@@ -66,24 +63,11 @@ pipeline:
                - failed_pipeline_run_id: the latest failed run id in the incident
                - python_branch: the python_branch input that run used
                - summary: 2-4 sentences covering the task, root cause (say whether it came from the incident diagnosis), evidence and suggested next step.
-  escalate:
-    name: Escalate to human
-    depends_on: [triage]
-    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] and TASKS['triage_failure'].OUTPUTS['verdict'] == 'ESCALATE' }}
-    tasks:
-      notify_escalation:
-        name: Post escalation to Slack
-        integration: SLACK
-        integration_job: SEND_SLACK_MESSAGE
-        connection: slack_connect_47274
-        parameters:
-          channel_name: agent-slack-alerts
-          text: |-
-            :warning: Synthetic Marketing needs a human, the agent will not change code for this one.
-
-            Run: https://app.getorchestra.io/pipeline-runs/${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }}/lineage
-
-            Triage: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+            4. Only if the verdict is ESCALATE, post this message to the Slack channel #agent-slack-alerts with your Slack integration, filling in the values:
+               :warning: Synthetic Marketing needs a human, the agent will not change code for this one.
+               Run: https://app.getorchestra.io/pipeline-runs/<failed_pipeline_run_id>/lineage
+               Triage: <summary>
+               For any other verdict, post nothing.
   retry_transient:
     name: Retry transient failure
     depends_on: [triage]
@@ -110,7 +94,6 @@ pipeline:
         integration_job: RUN_AGENT
         parameters:
           agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
-          set_outputs: true
           prompt: |-
             You are the FIX step. Triage has already diagnosed this failure.
 
@@ -121,27 +104,9 @@ pipeline:
             1. Clone early-signal-tech/orchestra-pipelines, check out the branch the failed run used, and create ${{ inputs.fix_branch_prefix }}<short-description> from it. Implement the minimal fix.
             2. Open a pull request from your branch into the branch the failed run used (not into main unless that is the branch). Do NOT merge it.
             3. Start Synthetic Marketing (alias synthetic_marketing) in environment ${{ inputs.dev_environment }} with runInputs python_branch=<your branch>, keeping the failed run's other inputs. Do not wait for it: this pipeline triages the rerun itself.
-            4. Set these task outputs right away, then stop:
-               - pr_url: the pull request URL
-               - fix_branch: the branch name
-               - dev_run_id: the rerun's pipeline run id
-               - fix_summary: what you changed and why.
-            Setting the outputs is required; the next task reads them.
-  notify_pr:
-    name: Announce the PR
-    depends_on: [fix_on_dev]
-    tasks:
-      post_pr:
-        name: Post the PR to Slack
-        integration: SLACK
-        integration_job: SEND_SLACK_MESSAGE
-        connection: slack_connect_47274
-        parameters:
-          channel_name: agent-slack-alerts
-          text: |-
-            :wrench: Agent fix ready for review. A human merges it.
-
-            Triage: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
-            Fix: ${{ TASKS['fix_and_open_pr'].OUTPUTS['fix_summary'] }}
-            PR: ${{ TASKS['fix_and_open_pr'].OUTPUTS['pr_url'] }}
-            Rerun on the fix branch: https://app.getorchestra.io/pipeline-runs/${{ TASKS['fix_and_open_pr'].OUTPUTS['dev_run_id'] }}/lineage
+            4. Post this message to the Slack channel #agent-slack-alerts with your Slack integration, filling in the values, then stop:
+               :wrench: Agent fix ready for review. A human merges it.
+               Triage: <the triage summary above>
+               Fix: <what you changed and why>
+               PR: <the pull request URL>
+               Rerun on the fix branch: https://app.getorchestra.io/pipeline-runs/<the rerun's pipeline run id>/lineage
