@@ -1,5 +1,5 @@
 version: v1
-name: Synthetic Marketing Auto-heal from Incident
+name: Early Signal - Synthetic Marketing Auto-heal from Incident
 inputs:
   alert:
     type: dict
