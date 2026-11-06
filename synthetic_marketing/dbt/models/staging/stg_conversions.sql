@@ -10,13 +10,13 @@ cleaned as (
         user_id,
         attributed_campaign_id,
         attribution_model,
-        conversion_value,
+        conversion_value as revenue,
         timestamp::timestamp as timestamp,
 
         -- Calculated fields
         case
-            when conversion_value >= 100 then 'high'
-            when conversion_value >= 50 then 'medium'
+            when revenue >= 100 then 'high'
+            when revenue >= 50 then 'medium'
             else 'low'
         end as conversion_value_tier,
 
