@@ -8,7 +8,7 @@ with conversions as (
 select
     user_id,
     count(distinct conversion_id) as total_conversions,
-    sum(conversion_value) as total_conversion_value,
+    sum(revenue) as total_conversion_value,
     min(timestamp) as first_conversion_date,
     max(timestamp) as last_conversion_date
 from conversions
