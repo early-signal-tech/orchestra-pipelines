@@ -1,13 +1,14 @@
 {
-  "extraKnownMarketplaces": {
-    "orchestra-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "orchestra-hq/orchestra-skills"
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
       }
-    }
-  },
-  "enabledPlugins": {
-    "orchestra@orchestra-marketplace": true
+    ]
   }
 }

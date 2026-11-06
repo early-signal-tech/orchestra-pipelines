@@ -8,4 +8,5 @@ BUGS.md
 customer-profile-orchestra.md
 tracker/
 .claude/worktrees/
+.claude/skills/
 .claude/settings.local.json
