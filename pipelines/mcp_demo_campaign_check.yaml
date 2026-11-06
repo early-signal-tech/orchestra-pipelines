@@ -1,0 +1,30 @@
+version: v1
+name: Early Signal - MCP Demo Campaign Check
+# Demo pipeline built from Claude Code; read-only, no schedule.
+configuration:
+  concurrency:
+    max_active: 1
+    on_limit: SKIP
+alerts:
+- name: On Failure
+  statuses: [FAILED]
+  destinations:
+  - integration: SLACK
+    destination: '#agent-slack-alerts'
+pipeline:
+  stage_check:
+    name: Check
+    depends_on: []
+    tasks:
+      check_campaign_performance:
+        name: Campaign performance has rows
+        integration: MOTHERDUCK
+        integration_job: MOTHERDUCK_EXECUTE_QUERY
+        connection: early_signal___synthetic_marketing_data_93711
+        depends_on: []
+        parameters:
+          query: |
+            SELECT count(*) AS row_count,
+                   CASE WHEN count(*) = 0 THEN error('campaign_performance is empty') ELSE 'ok' END AS result
+            FROM synthetic_marketing_data.analytics.campaign_performance
+          set_outputs: false
