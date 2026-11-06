@@ -28,12 +28,12 @@ pipeline:
   wait_for_diagnosis:
     name: Wait for Triago
     tasks:
-      wait_1_min:
+      wait_for_triago:
         name: Give Triago time to diagnose
         integration: ORCHESTRA
         integration_job: WAIT
         parameters:
-          wait_minutes: 1
+          wait_minutes: 3
   triage:
     name: Triage
     depends_on: [wait_for_diagnosis]
@@ -53,9 +53,9 @@ pipeline:
 
             1. Read the incident (get_incident) and its events (list_incident_events). Orchestra's incident diagnosis agent (AI_DIAGNOSIS_COMPLETED event) investigates every new incident and usually finishes 30-60 s after it opens, so it may not be there yet. If there is no AI_DIAGNOSIS_COMPLETED event newer than the incident's latest failure, wait about 15 s (run `sleep 15` if you have a shell) and list the events again; repeat up to 8 times. Once it is there, use that diagnosis as the root cause. Only if it never arrives, open the task run logs yourself.
             2. Classify into exactly one verdict:
-               - FIX: the run FAILED because of a code or config issue in git that an agent can safely fix with a PR (dbt model, Python bug, SQL in the repo).
+               - FIX: the run FAILED because of a code or config issue in git that a PR can fix (dbt model, Python bug, SQL in the repo). This includes fixes that involve a choice or a business decision, such as a renamed or removed column: the fix step opens the PR and decides whether a human must approve it before merge.
                - RETRY: transient (timeout, rate limit, vendor outage, network blip).
-               - ESCALATE: needs a human: credentials, permissions, upstream data quality, business logic ambiguity. A run that ended WARNING because the `dbt data quality tests` task found bad rows is always ESCALATE: the data is wrong, not the code. A run whose fail_mode input is anything other than 'none' is a deliberate failure injection, so it is always ESCALATE, never FIX: the generator broke the data on purpose.
+               - ESCALATE: no change in git can fix it: credentials, permissions, upstream data quality. A run that ended WARNING because the `dbt data quality tests` task found bad rows is always ESCALATE: the data is wrong, not the code. A run whose fail_mode input is anything other than 'none' is a deliberate failure injection, so it is always ESCALATE, never FIX: the generator broke the data on purpose.
                - IGNORE: the latest failed run's python_branch input starts with 'agent-fix/' (a fix rerun), or this incident was already handled (an earlier escalation or fix for the same incident).
                Runs on other branches (for example 'demo/...') are NOT ignored.
             3. Set these task outputs:
@@ -86,7 +86,8 @@ pipeline:
   fix_on_dev:
     name: Fix on a branch
     depends_on: [triage]
-    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] and TASKS['triage_failure'].OUTPUTS['verdict'] == 'FIX' }}
+    # Runs for every verdict: Orchestra resolves every output a condition names, even after a false `and`, so the groups below need needs_review to exist.
+    condition: ${{ task_groups['triage'].all().status in ['SUCCEEDED', 'WARNING'] }}
     tasks:
       fix_and_open_pr:
         name: Fix, open PR and rerun
@@ -94,8 +95,12 @@ pipeline:
         integration_job: RUN_AGENT
         parameters:
           agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
+          set_outputs: true
           prompt: |-
             You are the FIX step. Triage has already diagnosed this failure.
+
+            Triage verdict: ${{ TASKS['triage_failure'].OUTPUTS['verdict'] }}
+            If the verdict is not FIX, do nothing else: set needs_review to 'skip' and pr_url, fix_branch, fix_run_id, fix_run_status and review_reason to 'none', then stop.
 
             Failed run: ${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }}
             Branch the failed run used: ${{ TASKS['triage_failure'].OUTPUTS['python_branch'] }}
@@ -103,10 +108,78 @@ pipeline:
 
             1. Clone early-signal-tech/orchestra-pipelines, check out the branch the failed run used, and create ${{ inputs.fix_branch_prefix }}<short-description> from it. Implement the minimal fix.
             2. Open a pull request from your branch into the branch the failed run used (not into main unless that is the branch). Do NOT merge it.
-            3. Start Synthetic Marketing (alias synthetic_marketing) in environment ${{ inputs.dev_environment }} with runInputs python_branch=<your branch>, keeping the failed run's other inputs. Do not wait for it: this pipeline triages the rerun itself.
-            4. Post this message to the Slack channel #agent-slack-alerts with your Slack integration, filling in the values, then stop:
-               :wrench: Agent fix ready for review. A human merges it.
-               Triage: <the triage summary above>
-               Fix: <what you changed and why>
-               PR: <the pull request URL>
-               Rerun on the fix branch: https://app.getorchestra.io/pipeline-runs/<the rerun's pipeline run id>/lineage
+            3. Start Synthetic Marketing (alias synthetic_marketing) in environment ${{ inputs.dev_environment }} with runInputs python_branch=<your branch>, keeping the failed run's other inputs. Poll it until it finishes.
+            4. Decide whether a human must review the fix before it is merged. needs_review is 'false' only if ALL of these hold:
+               - the rerun on your branch ended SUCCEEDED;
+               - you changed only files under synthetic_marketing/dbt/models/, and at most 3 of them;
+               - no model's output columns are renamed, removed or change type, so nothing downstream sees a difference;
+               - there was only one reasonable fix (for example a typo or a broken reference), not a choice between options.
+               Otherwise needs_review is 'true'. A fix that renames, drops or re-adds a column, touches business logic, or picks one of several valid fixes always needs review.
+            5. Set these task outputs:
+               - pr_url: the pull request URL
+               - fix_branch: the name of your fix branch
+               - fix_run_id: the rerun's pipeline run id
+               - fix_run_status: the rerun's final status
+               - needs_review: the string 'true' or 'false', not a boolean
+               - review_reason: one sentence on why, naming the rule that decided it
+  approve_fix:
+    name: Review the agent fix
+    depends_on: [fix_on_dev]
+    condition: ${{ task_groups['fix_on_dev'].all().status == 'SUCCEEDED' and TASKS['fix_and_open_pr'].OUTPUTS['needs_review'] in ['true', True] }}
+    tasks:
+      approve_pr:
+        name: Approve merging the agent fix
+        integration: ORCHESTRA
+        integration_job: APPROVAL
+        treat_failure_as_warning: true
+        configuration:
+          timeout: 1800
+        parameters:
+          message_integration: SLACK
+          message_connection_id: slack_connect_47274
+          message_destination: agent-slack-alerts
+          message: |-
+            Synthetic Marketing failed and the agent prepared a fix that needs a human.
+            What broke: ${{ TASKS['triage_failure'].OUTPUTS['summary'] }}
+            Why it needs review: ${{ TASKS['fix_and_open_pr'].OUTPUTS['review_reason'] }}
+            Failed run: https://app.getorchestra.io/pipeline-runs/${{ TASKS['triage_failure'].OUTPUTS['failed_pipeline_run_id'] }}/lineage
+            Fix PR: ${{ TASKS['fix_and_open_pr'].OUTPUTS['pr_url'] }}
+            Rerun on the fix branch (${{ TASKS['fix_and_open_pr'].OUTPUTS['fix_run_status'] }}): https://app.getorchestra.io/pipeline-runs/${{ TASKS['fix_and_open_pr'].OUTPUTS['fix_run_id'] }}/lineage
+            Approve: the agent merges the PR into ${{ TASKS['triage_failure'].OUTPUTS['python_branch'] }}, reruns Synthetic Marketing and comments on the incident.
+            Reject, or no answer in 30 minutes: nothing is merged and the PR stays open for a human.
+  merge_fix:
+    name: Merge the approved fix
+    depends_on: [approve_fix]
+    condition: ${{ tasks['approve_pr'].status == 'SUCCEEDED' }}
+    tasks:
+      merge_and_rerun:
+        name: Merge PR, rerun and report
+        integration: ORCHESTRA
+        integration_job: RUN_AGENT
+        parameters: &merge_parameters
+          agent_id: 5bff9b5a-4d76-4d0f-9485-7b394da0f33e
+          prompt: |-
+            You are the MERGE step.
+
+            Alert: ${{ inputs.alert }} (the incident id is detail.incident_id)
+            PR: ${{ TASKS['fix_and_open_pr'].OUTPUTS['pr_url'] }}
+            Base branch: ${{ TASKS['triage_failure'].OUTPUTS['python_branch'] }}
+            needs_review: ${{ TASKS['fix_and_open_pr'].OUTPUTS['needs_review'] }} ('true' means a human approved it, 'false' means the agent merges on its own)
+            Why: ${{ TASKS['fix_and_open_pr'].OUTPUTS['review_reason'] }}
+
+            1. Merge the PR into the base branch. If the merge fails, post the exact error as a comment on the incident (create_incident_comment) and fail this task.
+            2. Start Synthetic Marketing (alias synthetic_marketing) in environment ${{ inputs.dev_environment }} with runInputs python_branch=<the base branch>, keeping the failed run's other inputs.
+            3. Poll that run until it finishes and note its status.
+            4. Comment on the incident (create_incident_comment) with: the PR URL, who decided the merge (a human approved it, or the agent merged it on its own and why), the branch it was merged into, and the rerun link https://app.getorchestra.io/pipeline-runs/<rerun id>/lineage with its final status.
+            5. Post the same summary to the Slack channel #agent-slack-alerts with your Slack integration.
+            Fail this task if the rerun ends FAILED.
+  auto_merge_fix:
+    name: Merge a safe fix without review
+    depends_on: [fix_on_dev]
+    condition: ${{ task_groups['fix_on_dev'].all().status == 'SUCCEEDED' and TASKS['fix_and_open_pr'].OUTPUTS['needs_review'] in ['false', False] }}
+    tasks:
+      auto_merge_and_rerun:
+        name: Merge PR, rerun and report
+        integration: ORCHESTRA
+        integration_job: RUN_AGENT
+        parameters: *merge_parameters
