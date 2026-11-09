@@ -12,7 +12,7 @@ inputs:
 configuration:
   concurrency:
     max_active: 1
-    on_limit: SKIP
+    on_limit: QUEUE
 webhook:
   enabled: true
   run_inputs:
