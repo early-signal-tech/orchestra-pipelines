@@ -1,0 +1,31 @@
+version: v1
+name: Early Signal - dbt Quickstart
+# dbt Core quickstart built from Claude Code; no schedule.
+configuration:
+  concurrency:
+    max_active: 1
+    on_limit: SKIP
+alerts:
+- name: On Failure
+  statuses: [FAILED]
+  destinations:
+  - integration: SLACK
+    destination: '#agent-slack-alerts'
+pipeline:
+  stage_dbt:
+    name: dbt
+    depends_on: []
+    tasks:
+      dbt_build:
+        name: dbt build
+        integration: DBT_CORE
+        integration_job: DBT_CORE_EXECUTE
+        connection: early_signal___dbt___synthetic_marketing_data_06486
+        depends_on: []
+        parameters:
+          branch: main
+          commands: dbt build --exclude tag:data_quality
+          package_manager: PIP
+          project_dir: synthetic_marketing/dbt
+          python_version: '3.12'
+          shallow_clone_dirs: synthetic_marketing/dbt
